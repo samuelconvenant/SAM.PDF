@@ -1,0 +1,61 @@
+.document-showcase { min-width: 0; padding-block: 14px; }
+.document-stage { position: relative; height: clamp(275px, 34vw, 438px); perspective: 1050px; touch-action: pan-y; user-select: none; cursor: grab; }
+.document-stage[data-dragging] { cursor: grabbing; }
+.document-halo { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; background: radial-gradient(ellipse, #96723322, transparent 66%); }
+.document-halo span { grid-area: 1/1; width: min(87%, 405px); aspect-ratio: 1; border: 1px solid #785e343f; border-radius: 50%; }
+.document-halo span + span { width: min(69%, 325px); border-color: #876e3e3f; border-right-color: #b393596e; animation: orbital-turn 36s linear infinite; }
+.document-group { position: absolute; inset: 0; transform-style: preserve-3d; transform: rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)); pointer-events: none; }
+.document-card {
+  --depth: 0px;
+  --lift: 0px;
+  --shift: 0%;
+  --angle: 0deg;
+  width: clamp(125px, 16vw, 224px); aspect-ratio: .77;
+  position: absolute; left: 50%; top: 50%; padding: 0; border: 0; border-radius: 9px; background: none;
+  transform-style: preserve-3d;
+  transform: translate(-50%, -50%) translate3d(var(--shift), 0, calc(var(--depth) + var(--lift))) rotateZ(var(--angle));
+  transition: transform .55s var(--ease);
+  pointer-events: auto;
+}
+.document-card--merge { --depth: -42px; --shift: -47%; --angle: -17deg; }
+.document-card--edit { --depth: 28px; --angle: -4deg; }
+.document-card--convert { --depth: -30px; --shift: 47%; --angle: 15deg; }
+.document-card[aria-pressed=true] { --lift: 22px; }
+.document-card:not(.document-card--edit)[aria-pressed=true] { --lift: 75px; }
+.document-stage:has(.document-card:hover) .document-card:not(:hover) { --lift: -15px; }
+.document-card:hover, .document-card:focus-visible { --lift: 94px; }
+.document-card:focus-visible { outline-offset: 5px; }
+.document-face {
+  position: absolute; inset: 0; border: 1px solid #927547; border-radius: inherit; overflow: hidden;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 11px; padding: 12%;
+  background: radial-gradient(ellipse at var(--light, 50%) 3%, #a5844430, transparent 67%), linear-gradient(145deg,#292318,#12110e 73%);
+  box-shadow: 1px 1px #5c4b30, 2px 2px #302618, 0 19px 37px #0009, inset 0 1px #e8d5a31e;
+  transition: border-color .35s, box-shadow .35s;
+}
+.document-card[aria-pressed=true] .document-face, .document-card:hover .document-face, .document-card:focus-visible .document-face { border-color: #d5b576; box-shadow: 1px 1px #8d7440, 2px 2px #443418, 0 18px 39px #000b, 0 0 24px #d4af3724; }
+.document-card--convert .document-face { align-items: flex-end; }
+.document-label { color: #f1dfb3; font-size: clamp(.57rem, 1.2vw, .8rem); font-weight: 600; white-space: nowrap; }
+.document-format { color: #e8d5a3; font: 400 clamp(1.8rem,4.5vw,3.8rem)/.9 var(--font-display); letter-spacing: -.055em; }
+.document-rules { display: grid; gap: 6px; width: 100%; }
+.document-rules i { height: 1px; background: #a087583d; }
+.document-rules i:last-child { width: 64%; }
+.document-seal { border: 1px solid #9b8153; border-radius: 50%; width: 28px; aspect-ratio: 1; display: grid; place-items: center; color: #e8d5a3; font: italic 1rem/1 var(--font-display); }
+.document-actions { min-height: 56px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 13px; padding-inline: 8px; }
+.document-actions a { display: inline-flex; align-items: center; gap: 5px; color: #e8d5a3; font-size: .84rem; padding: 7px 3px; }
+.document-actions a:hover { text-decoration: underline; }
+@keyframes orbital-turn { to { transform: rotate(360deg); } }
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .document-showcase { animation: stack-enter .5s var(--ease) both; }
+  .document-group { animation: stack-float 8s ease-in-out infinite alternate; }
+  @keyframes stack-enter { from { opacity: .72; translate: 0 8px; } }
+  @keyframes stack-float { to { translate: 0 -7px; } }
+}
+@media (max-width: 900px) and (min-width: 671px) { .nav-links { gap: 3px; } .nav-links a { padding-inline: 6px; font-size: .77rem; } }
+@media (max-width: 670px) {
+  .document-showcase { padding-block: 0 5px; }
+  .document-stage { height: 250px; }
+  .document-card { width: clamp(115px,36vw,155px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .document-card:hover, .document-card:focus-visible { --lift: 30px; }
+}
