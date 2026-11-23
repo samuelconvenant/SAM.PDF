@@ -9,6 +9,7 @@ const icons = {
   "images-to-pdf": "M3 5h14v11H3zM6 13l3-3 3 3 2-2 3 3m3-6v12H7M7 8h.1",
   "pdf-to-word": "M4 4h11l4 4v12H4zM15 4v4h4M7 12l2 5 2-4 2 4 2-5",
   "word-to-pdf": "M5 3h10l4 4v14H5zM15 3v4h4M8 12h8m-8 4h5",
+  protect: "M12 22C9 20 5 18 5 12V5l7-3 7 3v7c0 6-4 8-7 10Zm-3-7h6v-4H9Zm1-4V9a2 2 0 0 1 4 0v2",
 };
 
 export function ToolIcon({ tool }: { tool: Tool }) {

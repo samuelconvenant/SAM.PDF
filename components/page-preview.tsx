@@ -10,10 +10,21 @@ const PreviewContext = createContext<LoadedDocument | null>(null);
 
 export function usePdf() { return useContext(PreviewContext)?.pdf ?? null; }
 
-export function PagePreviews({ file, children, full = false }: { file: Blob; children: React.ReactNode; full?: boolean }) {
+export function PagePreviews({ file, children, full = false, defer = false, password, onLocked }: {
+  file: Blob; children: React.ReactNode; full?: boolean; defer?: boolean; password?: string; onLocked?: () => void;
+}) {
   const [document, setDocument] = useState<LoadedDocument | null>(null);
   const [failedFile, setFailedFile] = useState<Blob | null>(null);
+  const [visible, setVisible] = useState(!defer);
   const loaded = useRef<PDFDocumentProxy | null>(null);
+  const observed = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (visible || !observed.current) return;
+    const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) setVisible(true); }, { rootMargin: "160px" });
+    observer.observe(observed.current);
+    return () => observer.disconnect();
+  }, [visible]);
 
   useEffect(() => () => {
     void loaded.current?.destroy().catch(() => {});
@@ -21,29 +32,37 @@ export function PagePreviews({ file, children, full = false }: { file: Blob; chi
   }, []);
 
   useEffect(() => {
+    if (!visible) return;
     let canceled = false;
     let dispose: (() => void) | undefined;
     void Promise.all([import("pdfjs-dist"), file.arrayBuffer()]).then(([pdfjs, buffer]) => {
       if (canceled) return;
       pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-      const loading = pdfjs.getDocument({ data: buffer, useSystemFonts: true, enableXfa: false });
+      const loading = pdfjs.getDocument({ data: buffer, password, useSystemFonts: true, enableXfa: false });
       dispose = () => { void loading.destroy().catch(() => {}); };
       return loading.promise.then((doc) => {
         if (canceled) return;
         const previous = loaded.current;
         loaded.current = doc;
         dispose = undefined;
+        setFailedFile(null);
         setDocument({ pdf: doc, file });
         void previous?.destroy().catch(() => {});
       });
-    }).catch(() => { if (!canceled) setFailedFile(file); });
+    }).catch((error) => {
+      dispose?.();
+      dispose = undefined;
+      if (canceled) return;
+      if (onLocked && error?.name === "PasswordException") onLocked();
+      else setFailedFile(file);
+    });
     return () => { canceled = true; dispose?.(); };
-  }, [file]);
+  }, [file, onLocked, password, visible]);
 
   const failed = failedFile === file;
   return <PreviewContext.Provider value={document}>
-    {failed && <p className="workspace-error" role="alert">{full ? "This PDF could not be displayed in this browser." : "Previews are unavailable for this file. You can still edit pages by number."}</p>}
-    {(!full || !failed || document) && children}
+    {failed && !defer && <p className="workspace-error" role="alert">{full ? "This PDF could not be displayed in this browser." : "Previews are unavailable for this file. You can still edit pages by number."}</p>}
+    {defer ? <div ref={observed}>{children}</div> : (!full || !failed || document) && children}
   </PreviewContext.Provider>;
 }
 
@@ -65,12 +84,13 @@ function remember(pdf: PDFDocumentProxy, frame: Frame) {
   }
 }
 
-export const PdfCanvas = memo(function PdfCanvas({ index, rotation, zoom, overlay, onRendered }: {
+export const PdfCanvas = memo(function PdfCanvas({ index, rotation, zoom, overlay, onRendered, continuous = false }: {
   index: number;
   rotation?: number;
   zoom: number;
   overlay?: (geometry: PageGeometry, displayedPage: number) => ReactNode;
   onRendered?: (file: Blob) => void;
+  continuous?: boolean;
 }) {
   const data = useContext(PreviewContext);
   const frame = useRef<HTMLDivElement>(null);
@@ -153,7 +173,7 @@ export const PdfCanvas = memo(function PdfCanvas({ index, rotation, zoom, overla
   }, [onRendered, render]);
 
   const geometry = render?.geometry;
-  return <div className="pdf-stage" ref={frame} tabIndex={0} role="region" aria-label="Scrollable PDF page" onScroll={(event) => {
+  return <div className={`pdf-stage${continuous ? " pdf-stage-continuous" : ""}`} ref={frame} tabIndex={continuous ? undefined : 0} role={continuous ? undefined : "region"} aria-label={continuous ? undefined : "Scrollable PDF page"} onScroll={(event) => {
     const visible = painted.current;
     if (visible) positions.current.set(visible.index, { left: event.currentTarget.scrollLeft, top: event.currentTarget.scrollTop });
   }}>

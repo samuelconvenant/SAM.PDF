@@ -9,6 +9,24 @@
 .preview-header, .preview-footer, .editor-top { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 13px 16px; flex-wrap: wrap; }
 .preview-header, .editor-top { border-bottom: 1px solid var(--line); }
 .preview-footer { border-top: 1px solid var(--line); }
+.preview-downloads { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 7px; min-width: 0; }
+.preview-downloads .preview-name { flex: 1 1 160px; min-width: 0; max-width: 245px; margin: 0; color: var(--muted); font-size: .75rem; }
+.preview-name input { min-height: 38px; }
+.protection-dialog { width: min(470px, calc(100% - 26px)); }
+.protection-dialog .preview-header h2 { font-size: 1.42rem; }
+.protection-dialog .protect-form { padding: 14px 16px 16px; overflow: auto; }
+.protect-form { display: grid; gap: 10px; }
+.protect-form p, .unlock-source p { color: var(--muted); font-size: .84rem; }
+.protect-form fieldset { display: grid; gap: 7px; padding: 0; border: 0; min-width: 0; }
+.protection-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.password-field > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px; }
+.password-field .icon-button { width: 42px; height: 42px; border: 1px solid var(--line); }
+.protect-details { margin-top: 10px; grid-template-columns: minmax(0, 5fr) minmax(0, 4fr); }
+.protect-details > section { min-width: 0; }
+.protect-details .file-caption { margin-bottom: 5px; }
+.unlock-source { margin-block: 8px; display: grid; gap: 5px; }
+.unlock-source > summary { color: #e8d5a3; font-size: .84rem; cursor: pointer; }
+.unlock-source[open] > :not(summary) { margin-top: 5px; }
 .preview-header h2, .editor-top h2 { font-size: 1.55rem; font-weight: 400; }
 .preview-header p, .editor-top p, .editor-note, .editor-properties p { color: var(--muted); font-size: .84rem; overflow-wrap: anywhere; }
 .preview-actions { display: flex; }
@@ -30,6 +48,45 @@
 .pdf-sheet { position: relative; margin: 0 auto; color: #222; background: #fff; box-shadow: 0 5px 18px #0008; }
 .pdf-sheet canvas { display: block; width: 100%; height: 100%; }
 .pdf-loading { padding: 20px; color: var(--muted); font-size: .85rem; }
+.merge-controls, .merge-view { display: flex; gap: 5px; align-items: center; }
+.merge-view { border: 1px solid var(--line); border-radius: 8px; }
+.merge-view [aria-pressed=true] { color: #f2e0b7; background: #342919; }
+.merge-work-grid { grid-template-columns: minmax(0, 1fr); }
+.merge-work-grid .work-settings { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.merge-work-grid .work-settings h2 { display: none; }
+.merge-work-grid .merge-add-mobile { display: none; }
+.file-list.merge-gallery[data-view=grid] { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr)); gap: 10px; }
+.merge-gallery[data-view=grid] > li { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-content: start; gap: 5px; padding: 7px; }
+.merge-gallery[data-view=grid] .merge-cover, .merge-gallery[data-view=grid] .row-actions { grid-column: 1/-1; }
+.merge-gallery[data-view=grid] .row-actions { justify-content: flex-end; }
+.merge-gallery[data-view=grid] .file-icon { width: 19px; height: 28px; background: transparent; }
+.merge-order { font: 650 .76rem/1.7 var(--sans, sans-serif); color: #ecd9b1; border: 1px solid #5b4b32; border-radius: 4px; min-width: 19px; text-align: center; }
+.merge-cover { position: relative; display: block; overflow: hidden; border: 1px solid #514531; border-radius: 6px; color: #edd8a7; background: #28251f; padding: 0; cursor: pointer; }
+.merge-cover:hover { border-color: #d4af37; }
+.merge-cover .thumbnail { height: 137px; display: grid; place-items: center; }
+.merge-cover canvas { max-height: 122px; width: auto; height: auto; object-fit: contain; }
+.merge-cover-open { position: absolute; bottom: 6px; right: 6px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 1px solid #75613d; border-radius: 6px; background: #161411eb; font-size: .7rem; }
+.merge-gallery[data-view=list] .merge-cover { width: 68px; flex: none; }
+.merge-gallery[data-view=list] .merge-cover .thumbnail { height: 62px; min-height: 0; }
+.merge-gallery[data-view=list] .merge-cover canvas { max-height: 54px; }
+.merge-gallery[data-view=list] .merge-cover-open { display: none; }
+.pdf-scroll-pages { position: relative; max-height: min(64dvh, 760px); overflow: auto; scrollbar-gutter: stable; background: #292822; }
+.pdf-scroll-pages > section { box-sizing: border-box; }
+.scroll-page-number { height: 28px; padding: 5px 9px; font-size: .76rem; color: #e8d5a3; }
+.pdf-stage.pdf-stage-continuous { max-height: none; min-height: 0; overflow: visible; scrollbar-gutter: auto; }
+.document-dialog[data-expanded=true] .pdf-scroll-pages { max-height: calc(100dvh - 190px); }
+@media (max-width: 620px) {
+  .file-list.merge-gallery[data-view=grid] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .merge-gallery[data-view=grid] .file-icon { display: none; }
+  .merge-gallery[data-view=grid] > li { grid-template-columns: auto minmax(0, 1fr); }
+  .merge-gallery .row-actions .icon-button { width: 40px; height: 42px; }
+  .merge-gallery[data-view=list] .merge-cover { width: 48px; }
+  .merge-gallery[data-view=list] .file-icon { display: none; }
+  .merge-work-grid .merge-add-desktop { display: none; }
+  .merge-work-grid .merge-add-mobile { display: inline-flex; }
+  .merge-work-grid .work-settings { position: sticky; bottom: 4px; z-index: 2; justify-content: flex-end; background: #201c15f2; backdrop-filter: blur(12px); }
+  .merge-work-grid .work-settings p { flex-basis: 100%; }
+}
 .editor { background: #111; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .editor-note { padding: 8px 14px; }
 .editor-tools { justify-content: flex-start; }
@@ -43,17 +100,37 @@
 .editor-properties input[type=color] { padding: 3px; width: 100%; }
 .position-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
 .editor-reset { margin: 8px 14px; }
-.editor-overlay { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; user-select: none; }
+.editor-input, .editor-overlay { position: absolute; inset: 0; width: 100%; height: 100%; user-select: none; }
+.editor-input[data-mode=rectangle], .editor-input[data-mode=highlight], .editor-input[data-mode=ink] { touch-action: none; }
 .editor-overlay:not([data-mode=select]) { cursor: crosshair; }
 .editor-overlay[data-mode=select] { touch-action: auto; pointer-events: auto; }
-.editor-overlay[data-mode=select] .editor-mark { cursor: move; pointer-events: auto; touch-action: none; }
+.editor-overlay[data-mode=select] .editor-mark { cursor: move; pointer-events: auto; }
 .editor-mark[data-selected=true] { filter: drop-shadow(0 0 1px #826719); }
-.editor-object-outline { stroke: #91713a; stroke-dasharray: 3 2; stroke-width: 1; vector-effect: non-scaling-stroke; pointer-events: none; }
-.editor-resize-handle { fill: #a68a45; stroke: white; stroke-width: 1; cursor: nwse-resize; }
+.editor-object-outline { stroke: #91713a; stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
+.editor-guides { stroke: #a07514; stroke-dasharray: 5 4; pointer-events: none; }
+.editor-guides path, .editor-grip-surface, .editor-grip-lines { vector-effect: non-scaling-stroke; }
+.editor-grip, .editor-resize-handle { touch-action: none; }
+/* A real HTML hit target keeps touch capture separate from scrolling the SVG page. */
+.editor-touch-handle { display: none; position: absolute; transform: translate(-50%, -50%); touch-action: none; }
+@media (any-pointer: coarse) {
+  .editor-touch-handle { display: block; }
+}
+.editor-grip { cursor: grab; }
+.editor-grip:active { cursor: grabbing; }
+.editor-grip-surface { fill: #b18a35; stroke: #fff4dc; stroke-width: 1.3; pointer-events: none; }
+.editor-grip-lines { fill: none; stroke: #111; stroke-width: 1.3; pointer-events: none; }
+.editor-resize-handle:is([data-gesture=nw], [data-gesture=se]) { cursor: nwse-resize; }
+.editor-resize-handle:is([data-gesture=ne], [data-gesture=sw]) { cursor: nesw-resize; }
+.editor-resize-handle:is([data-gesture=n], [data-gesture=s]) { cursor: ns-resize; }
+.editor-resize-handle:is([data-gesture=e], [data-gesture=w]) { cursor: ew-resize; }
 .editor-inline-box textarea { resize: none; width: 100%; height: 100%; border: 1px solid #826629; border-radius: 0; background: #ffffffed; padding: 1px 2px; line-height: 1.2; }
 .editor-toggle { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .8rem; }
 .editor-crop { font-size: .8rem; }
 .editor-crop summary { color: #e8d5a3; cursor: pointer; padding-block: 3px; }
+.overlay-editor .mobile-editor { display: none; }
+.editor-file { min-width: 0; }
+.editor-header-actions, .editor-nudge { display: flex; align-items: center; gap: 4px; }
+.editor-nudge .icon-button { border: 1px solid var(--line); }
 @media(max-width: 760px) {
   .editor-grid { grid-template-columns: 72px minmax(0, 1fr); }
   .editor-properties { grid-column: 1/-1; border: 0; border-top: 1px solid var(--line); }
@@ -66,6 +143,42 @@
   .preview-footer .button { font-size: .76rem; padding-inline: 7px; }
   .preview-header, .preview-footer { padding-inline: 9px; }
 }
+@media (max-width: 620px) {
+  .preview-downloads { width: 100%; }
+  .preview-downloads .preview-name { flex-basis: 100%; max-width: unset; }
+  .protect-details { grid-template-columns: minmax(0, 1fr); }
+}
 .conversion-picker h2 { max-width: 100%; overflow-wrap: anywhere; }
 .conversion-actions { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
 .conversion-limit { margin-top: 6px; color: var(--muted); font-size: .85rem; }
+
+@media (max-width: 760px) {
+  .overlay-editor { display: flex; flex-direction: column; }
+  .overlay-editor .desktop-editor { display: none; }
+  .overlay-editor .mobile-editor { display: inline-flex; align-items: center; gap: 5px; }
+  .overlay-editor-top { order: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; padding: 6px; gap: 4px; }
+  .overlay-editor-top .editor-file h2 { display: none; }
+  .overlay-editor-top .editor-file p { font-size: .79rem; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+  .overlay-editor-top .button { min-height: 42px; padding: 5px 7px; font-size: .74rem; }
+  .overlay-editor-top .icon-button { justify-content: center; width: 35px; height: 42px; }
+  .overlay-editor > .preview-tools:not(.editor-tools) { order: 1; padding: 3px; }
+  .overlay-editor .editor-grid { display: contents; }
+  .overlay-editor .pdf-stage { order: 2; min-height: clamp(285px, 49dvh, 560px); max-height: min(57dvh, 640px); }
+  .overlay-editor .editor-context, .overlay-editor .editor-bottom { justify-content: space-evenly; flex-wrap: wrap; gap: 1px; padding: 5px; border-top: 1px solid var(--line); background: #171611; }
+  .overlay-editor .editor-context { order: 3; }
+  .overlay-editor .editor-bottom { order: 4; }
+  .editor-context button, .editor-bottom button { display: inline-flex; gap: 3px; align-items: center; justify-content: center; flex-direction: column; min-width: 44px; min-height: 44px; border: 1px solid transparent; border-radius: 7px; color: #eadcc0; background: transparent; font-size: .7rem; padding: 4px; }
+  .editor-context button[aria-expanded=true], .editor-bottom button:is([aria-pressed=true], [aria-expanded=true]) { background: #352a19; border-color: #6c5633; }
+  .overlay-editor .preview-thumbnails, .overlay-editor .editor-tools, .overlay-editor .editor-properties { display: none; order: 5; }
+  .overlay-editor[data-panel=pages] .preview-thumbnails { display: flex; flex-wrap: wrap; gap: 5px; max-height: 135px; }
+  .overlay-editor[data-panel=pages] .preview-thumbnails li { flex: 0 0 53px; }
+  .overlay-editor[data-panel=more] .editor-tools { display: flex; }
+  .overlay-editor:is([data-panel=text], [data-panel=move], [data-panel=resize], [data-panel=style], [data-panel=crop]) .editor-properties { display: flex; max-height: 29dvh; overflow: auto; background: #181714; }
+  .overlay-editor[data-panel=text] .editor-properties > :not([data-section=text]),
+  .overlay-editor[data-panel=move] .editor-properties > :not([data-section=move]),
+  .overlay-editor[data-panel=resize] .editor-properties > :not([data-section=resize]),
+  .overlay-editor[data-panel=style] .editor-properties > :not([data-section=style]),
+  .overlay-editor[data-panel=crop] .editor-properties > :not([data-section=crop]) { display: none; }
+  .overlay-editor .editor-properties input, .overlay-editor .editor-properties select, .overlay-editor .editor-properties textarea { font-size: 1rem; }
+  .overlay-editor .editor-overlay[data-mode=select] .editor-mark { cursor: default; }
+}

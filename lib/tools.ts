@@ -12,7 +12,8 @@ export const wordTools = [
 ] as const;
 
 const createTool = { id: "create", name: "Create PDF", category: "Create", description: "Start with a blank A4 page. Write and format a document with tables and pictures." } as const;
-export const tools = [...localTools, createTool, ...wordTools] as const;
+const protectTool = { id: "protect", name: "Protect PDF", category: "Protect", description: "Require a password to open a PDF with AES-256 encryption." } as const;
+export const tools = [...localTools, createTool, ...wordTools, protectTool] as const;
 export type Tool = (typeof tools)[number];
 export type LocalTool = (typeof localTools)[number];
 export type Operation = LocalTool["id"];

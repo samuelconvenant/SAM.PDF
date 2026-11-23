@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { zipSync } from "fflate";
 import { conversionMaxBytes } from "../../../../lib/conversion";
+import { isLocalDocumentRequest, localPython, readDocumentRequest } from "../../../../lib/local-document-server";
 
 export const runtime = "nodejs";
 const execute = promisify(execFile);
@@ -30,37 +31,11 @@ function error(status: number, message: string) {
   return Response.json({ message }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
-async function inputBytes(request: Request) {
-  const reader = request.body?.getReader();
-  if (!reader) return Buffer.alloc(0);
-  const parts: Uint8Array[] = [];
-  let size = 0;
-  try {
-    while (true) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      size += chunk.value.byteLength;
-      if (size > conversionMaxBytes) {
-        await reader.cancel();
-        return null;
-      }
-      parts.push(chunk.value);
-    }
-    return Buffer.concat(parts, size);
-  } finally {
-    reader.releaseLock();
-  }
-}
-
 export async function POST(request: Request, { params }: { params: Promise<{ kind: string }> }) {
   const { kind } = await params;
   const toWord = kind === "pdf-to-word";
   if (!toWord && kind !== "word-to-pdf") return error(404, "Unknown conversion.");
-  const host = request.headers.get("host") ?? "";
-  const origin = request.headers.get("origin");
-  if (!/^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(host) ||
-      request.headers.get("sec-fetch-site") === "cross-site" ||
-      (origin && origin !== `http://${host}` && origin !== `https://${host}`)) {
+  if (!isLocalDocumentRequest(request)) {
     return error(403, "Use the local samPDF server for document conversion.");
   }
   if (request.headers.get("content-type") !== "application/octet-stream") return error(415, "Choose a document to upload.");
@@ -71,13 +46,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ kin
   active = true;
   let directory: string | undefined;
   try {
-    const input = await inputBytes(request);
+    const input = await readDocumentRequest(request, conversionMaxBytes);
     if (!input) return error(413, "Choose a file of 25 MiB or less.");
     if (!input.length) return error(400, "Choose a non-empty document.");
     directory = await mkdtemp(join(tmpdir(), "sampdf-convert-"));
     await writeFile(join(directory, toWord ? "source.pdf" : "source.docx"), input, { mode: 0o600 });
     const root = process.cwd();
-    const python = process.env.SAMPDF_PYTHON || join(root, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
+    const python = localPython(root);
     try {
       await execute(python, [join(root, "scripts", "convert_document.py"), kind, directory], {
         cwd: directory, windowsHide: true, timeout: 120_000, maxBuffer: 1024 * 1024,

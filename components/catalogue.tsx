@@ -6,7 +6,7 @@ import { useState } from "react";
 import { tools } from "../lib/tools";
 import { ToolIcon } from "./tool-icon";
 
-const categories = ["All tools", "Create", "Organize", "Edit", "Convert"] as const;
+const categories = ["All tools", "Create", "Organize", "Edit", "Convert", "Protect"] as const;
 
 export function Catalogue() {
   const [category, setCategory] = useState<(typeof categories)[number]>("All tools");

@@ -1,5 +1,5 @@
 import { Encodings, Font } from "@pdf-lib/standard-fonts";
-import type { Overlay } from "./editor-types";
+import type { Bounds, Overlay, Point } from "./editor-types";
 
 export const overlayFonts = {
   Helvetica: "Arial, Helvetica, sans-serif",
@@ -8,6 +8,33 @@ export const overlayFonts = {
 };
 export type OverlayFont = keyof typeof overlayFonts;
 export const clamp = (value: number, max = 1) => Math.max(0, Math.min(max, value));
+
+export const resizeEdges = ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const;
+export type ResizeEdge = (typeof resizeEdges)[number];
+
+export function moveOverlay(box: Overlay, delta: Point, snap?: Point) {
+  const x = clamp(box.x + delta.x, 1 - (box.kind === "ink" ? 0 : box.width));
+  const y = clamp(box.y + delta.y, 1 - (box.kind === "ink" ? 0 : box.height));
+  const centerX = .5 - box.width / 2;
+  const centerY = .5 - box.height / 2;
+  return {
+    x: snap && Math.abs(x - centerX) <= snap.x ? centerX : x,
+    y: snap && Math.abs(y - centerY) <= snap.y ? centerY : y,
+  };
+}
+
+export function resizeOverlay(box: Bounds, edge: ResizeEdge, delta: Point, minimum: Point): Bounds {
+  const right = box.x + box.width;
+  const bottom = box.y + box.height;
+  const minWidth = Math.min(minimum.x, box.width);
+  const minHeight = Math.min(minimum.y, box.height);
+  const x = edge.includes("w") ? clamp(box.x + delta.x, right - minWidth) : box.x;
+  const y = edge.includes("n") ? clamp(box.y + delta.y, bottom - minHeight) : box.y;
+  return { x, y,
+    width: (edge.includes("e") ? Math.max(x + minWidth, clamp(right + delta.x)) : right) - x,
+    height: (edge.includes("s") ? Math.max(y + minHeight, clamp(bottom + delta.y)) : bottom) - y,
+  };
+}
 
 export function textBoxLines(overlay: Overlay, width: number, height: number) {
   const font = Font.load(overlay.font ?? "Helvetica");

@@ -7,6 +7,7 @@ import { ToolIcon } from "../../../components/tool-icon";
 import { Workspace } from "../../../components/workspace";
 import { ConversionWorkspace } from "../../../components/conversion-workspace";
 import { CreateTool } from "../../../components/create-tool";
+import { ProtectWorkspace } from "../../../components/protect-workspace";
 
 type Props = { params: Promise<{ tool: string }> };
 export function generateStaticParams() { return tools.map(({ id }) => ({ tool: id })); }
@@ -26,7 +27,7 @@ export default async function ToolPage({ params }: Props) {
         <h1>{tool.name}</h1>
         <p>{tool.description}</p>
       </div>
-      {tool.id === "create" ? <CreateTool /> : !("accept" in tool) ? (
+      {tool.id === "create" ? <CreateTool /> : tool.id === "protect" ? <ProtectWorkspace /> : !("accept" in tool) ? (
         <ConversionWorkspace key={tool.id} kind={tool.id} />
       ) : <>
         <Workspace key={tool.id} tool={tool} />

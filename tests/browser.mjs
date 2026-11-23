@@ -39,6 +39,8 @@ async function fileResult(page, label) {
     throw error;
   }
   const canvas = await dialog.locator(".pdf-sheet canvas").elementHandle();
+  if (label === "Download PDF") await dialog.getByRole("button", { name: "Protect with Password", exact: true }).waitFor();
+  if (label === "Download ZIP") await dialog.getByRole("button", { name: "Protect each PDF", exact: true }).waitFor();
   const download = page.waitForEvent("download");
   await dialog.getByRole("link", { name: label }).click();
   const result = await download;
@@ -121,7 +123,7 @@ try {
   await page.getByRole("searchbox").fill("no matches");
   await page.getByText("No tools match your search.").waitFor();
   await page.getByRole("button", { name: "Show all tools" }).click();
-  assert.equal(await page.locator(".tool-card").count(), 8);
+  assert.equal(await page.locator(".tool-card").count(), 9);
 
   const showcase = page.getByRole("region", { name: "Interactive PDF tools" });
   const stage = showcase.locator(".document-stage");
@@ -502,7 +504,7 @@ try {
   await overlay.dispatchEvent("drop", { dataTransfer: photoTransfer, clientX: photoBounds.x + photoBounds.width * .58, clientY: photoBounds.y + photoBounds.height * .22 });
   await photoTransfer.dispose();
   await page.getByLabel("Photo size").selectOption("35x45");
-  const handle = page.locator(".editor-resize-handle");
+  const handle = page.locator('.editor-resize-handle[data-gesture="se"]');
   await handle.scrollIntoViewIfNeeded();
   const resize = await handle.boundingBox();
   await page.mouse.move(resize.x + resize.width / 2, resize.y + resize.height / 2);
@@ -586,7 +588,7 @@ try {
       assert.equal(await menu.getAttribute("aria-expanded"), "false");
       assert.equal(await menu.evaluate((element) => element === document.activeElement), true);
     }
-    for (const path of ["/tools/merge", "/tools/split", "/tools/organize", "/tools/images-to-pdf", "/tools/create", "/tools/edit", "/tools/pdf-to-word", "/tools/word-to-pdf", "/help"]) {
+    for (const path of ["/tools/merge", "/tools/split", "/tools/organize", "/tools/images-to-pdf", "/tools/create", "/tools/edit", "/tools/pdf-to-word", "/tools/word-to-pdf", "/tools/protect", "/help"]) {
       await visit(phone, path);
       if (width === 390) await phone.screenshot({ path: resolve(artifacts, `${path.split("/").at(-1)}-mobile.png`), fullPage: true });
     }
@@ -623,12 +625,13 @@ try {
       await visit(phone, "/tools/edit");
       await phone.locator('input[type="file"]').setInputFiles(b);
       await phone.locator(".editor .pdf-sheet:not([hidden]) canvas").waitFor();
-      await phone.getByRole("button", { name: "Add text box" }).tap();
+      await phone.getByRole("button", { name: "Add text", exact: true }).tap();
       await phone.getByLabel("Overlay text").fill("Mobile review");
       await phone.getByLabel("Import JPEG or PNG photo").setInputFiles({ name: "portrait.jpg", mimeType: "image/jpeg", buffer: Buffer.from(passport, "base64") });
+      await phone.getByRole("button", { name: "Resize", exact: true }).tap();
       await phone.getByLabel("Photo size").selectOption("35x45");
       await phone.screenshot({ path: resolve(artifacts, "editor-active-mobile.png"), fullPage: true });
-      await phone.getByRole("button", { name: "Preview edited PDF" }).tap();
+      await phone.getByRole("button", { name: "Download", exact: true }).tap();
       doc = await PDFDocument.load(await fileResult(phone, "Download PDF"));
       assert.equal(doc.getPageCount(), 1);
 
