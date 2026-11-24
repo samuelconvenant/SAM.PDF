@@ -105,13 +105,13 @@
 .editor-overlay:not([data-mode=select]) { cursor: crosshair; }
 .editor-overlay[data-mode=select] { touch-action: auto; pointer-events: auto; }
 .editor-overlay[data-mode=select] .editor-mark { cursor: move; pointer-events: auto; }
-.editor-mark[data-selected=true] { filter: drop-shadow(0 0 1px #826719); }
-.editor-object-outline { stroke: #91713a; stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
+.editor-object-outline { stroke: #91713a; stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; }
 .editor-guides { stroke: #a07514; stroke-dasharray: 5 4; pointer-events: none; }
 .editor-guides path, .editor-grip-surface, .editor-grip-lines { vector-effect: non-scaling-stroke; }
 .editor-grip, .editor-resize-handle { touch-action: none; }
 /* A real HTML hit target keeps touch capture separate from scrolling the SVG page. */
 .editor-touch-handle { display: none; position: absolute; transform: translate(-50%, -50%); touch-action: none; }
+.editor-touch-body { cursor: move; }
 @media (any-pointer: coarse) {
   .editor-touch-handle { display: block; }
 }

@@ -1,12 +1,7 @@
-import { Encodings, Font } from "@pdf-lib/standard-fonts";
 import type { Bounds, Overlay, Point } from "./editor-types";
-
-export const overlayFonts = {
-  Helvetica: "Arial, Helvetica, sans-serif",
-  "Times-Roman": "'Times New Roman', Times, serif",
-  Courier: "'Courier New', Courier, monospace",
-};
-export type OverlayFont = keyof typeof overlayFonts;
+import { faceFor, findDraftFont } from "./draft-fonts";
+import { getFontMetrics } from "./document-fonts";
+import type { DocumentFontMetrics } from "./document-fonts";
 export const clamp = (value: number, max = 1) => Math.max(0, Math.min(max, value));
 
 export const resizeEdges = ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const;
@@ -36,23 +31,19 @@ export function resizeOverlay(box: Bounds, edge: ResizeEdge, delta: Point, minim
   };
 }
 
-export function textBoxLines(overlay: Overlay, width: number, height: number) {
-  const font = Font.load(overlay.font ?? "Helvetica");
+export function overlayFont(overlay: Overlay) {
+  const family = findDraftFont(overlay.font ?? "Helvetica");
+  return { family, face: faceFor(family, overlay.bold, overlay.italic) };
+}
+
+export function textBoxLines(overlay: Overlay, width: number, height: number, loaded?: DocumentFontMetrics) {
+  const { family, face } = overlayFont(overlay);
+  const font = loaded ?? getFontMetrics(family, face);
   const fontSize = overlay.size;
   const padding = 2;
   const limit = Math.max(1, width - padding * 2);
   const lines: string[] = [];
-  function measure(text: string) {
-    let advance = 0;
-    let previous = "";
-    for (const character of text) {
-      const code = character.codePointAt(0)!;
-      const glyph = Encodings.WinAnsi.canEncodeUnicodeCodePoint(code) ? Encodings.WinAnsi.encodeUnicodeCodePoint(code).name : "question";
-      advance += (font.getWidthOfGlyph(glyph) ?? 500) + (font.getXAxisKerningForPair(previous, glyph) ?? 0);
-      previous = glyph;
-    }
-    return advance * fontSize / 1000;
-  }
+  const measure = (text: string) => font.measure(text, fontSize);
   for (const paragraph of overlay.text.replace(/\r/g, "").replace(/\t/g, "    ").split("\n")) {
     let line = "";
     for (const token of paragraph.match(/\S+|\s+/g) ?? []) {
@@ -71,9 +62,10 @@ export function textBoxLines(overlay: Overlay, width: number, height: number) {
     }
     lines.push(line.trimEnd());
   }
-  const baseline = Math.max(0, font.Ascender ?? 780) * fontSize / 1000 + padding;
-  const descender = Math.abs(font.Descender ?? -220) * fontSize / 1000;
-  return lines.map((text, index) => ({ text, x: padding, y: baseline + index * fontSize * 1.2 }))
+  const ascent = font.ascent * fontSize;
+  const descender = font.descent * fontSize;
+  return lines.map((text, index) => ({ text, x: padding, y: padding + ascent + index * fontSize * 1.2,
+    width: measure(text), ascent, height: ascent + descender }))
     .filter((line) => line.y + descender <= height);
 }
 

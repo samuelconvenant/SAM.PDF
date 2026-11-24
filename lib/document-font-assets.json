@@ -1,0 +1,308 @@
+{
+  "merriweather": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "playfair-display": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "libre-baskerville": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "lora": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "crimson-text": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "eb-garamond": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "caladea": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "carlito": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "inter": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "open-sans": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "lato": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "montserrat": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "poppins": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "nunito": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "source-sans-3": {
+    "version": "5.3.1",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "noto-sans": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "work-sans": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "raleway": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "ubuntu": {
+    "version": "5.3.0",
+    "license": "UFL-1.0",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "dm-sans": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "roboto-mono": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "source-code-pro": {
+    "version": "5.3.1",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "ibm-plex-mono": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "jetbrains-mono": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "cinzel": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold"
+    ]
+  },
+  "oswald": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold"
+    ]
+  },
+  "abril-fatface": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular"
+    ]
+  },
+  "cormorant-garamond": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  },
+  "great-vibes": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular"
+    ]
+  },
+  "dancing-script": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold"
+    ]
+  },
+  "caveat": {
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold"
+    ]
+  },
+  "roboto": {
+    "version": "pdfmake 0.3.15",
+    "license": "OFL-1.1",
+    "faces": [
+      "regular",
+      "bold",
+      "italic",
+      "boldItalic"
+    ]
+  }
+}

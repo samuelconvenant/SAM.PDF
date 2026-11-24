@@ -1,6 +1,7 @@
 import type { JSONContent } from "@tiptap/react";
-import { Encodings } from "@pdf-lib/standard-fonts";
-import { findDraftFont } from "./draft-fonts";
+import { defaultDraftFont, faceFor, findDraftFont } from "./draft-fonts";
+import type { DraftFont } from "./draft-fonts";
+import { assertFontCoverage, fontBytes, loadFontMetrics } from "./document-fonts";
 import { draftImage, fitDraftImage, turnedSize } from "./draft-image-geometry";
 import { tableFormatting } from "./draft-table-format";
 
@@ -20,9 +21,6 @@ function textRun(node: JSONContent, inheritedSize: number): Block {
   const style = marks.get("textStyle");
   const font = findDraftFont(style?.fontFamily).pdf;
   const text = node.text ?? "";
-  if (font !== "Roboto" && Array.from(text).some((char) => !Encodings.WinAnsi.canEncodeUnicodeCodePoint(char.codePointAt(0)!))) {
-    throw new Error("Some characters cannot be encoded in this export font. Use Roboto for those characters.");
-  }
   const requestedSize = typeof style?.fontSize === "string" ? Number.parseFloat(style.fontSize) : inheritedSize;
   const color = typeof style?.color === "string" ? style.color : undefined;
   return {
@@ -31,6 +29,43 @@ function textRun(node: JSONContent, inheritedSize: number): Block {
     bold: marks.has("bold"), italics: marks.has("italic"),
     decoration: marks.has("underline") ? "underline" : marks.has("strike") ? "lineThrough" : undefined,
   };
+}
+
+function collectFonts(node: JSONContent, used: Map<string, DraftFont>, check: Promise<void>[], heading = false) {
+  if (node.text) {
+    const style = node.marks?.find(({ type }) => type === "textStyle");
+    const font = findDraftFont(style?.attrs?.fontFamily);
+    const face = faceFor(font, heading || node.marks?.some(({ type }) => type === "bold"), node.marks?.some(({ type }) => type === "italic"));
+    used.set(font.pdf, font);
+    const text = node.text;
+    check.push(loadFontMetrics(font, face).then((metrics) => assertFontCoverage(font, metrics, text)));
+  }
+  for (const child of node.content ?? []) collectFonts(child, used, check, node.type === "heading");
+}
+
+async function prepareFonts(document: JSONContent) {
+  const used = new Map([[defaultDraftFont.pdf, defaultDraftFont]]);
+  const check: Promise<void>[] = [];
+  collectFonts(document, used, check);
+  const files: Record<string, string> = {};
+  const definitions: Record<string, Record<string, string>> = {};
+  const variants = [["normal", false, false], ["bold", true, false], ["italics", false, true], ["bolditalics", true, true]] as const;
+  await Promise.all([...check, ...[...used.values()].map(async (font) => {
+    if (!font.asset) return;
+    const asset = font.asset;
+    definitions[asset] = Object.fromEntries(await Promise.all(variants.map(async ([name, bold, italic]) => {
+      const face = faceFor(font, bold, italic);
+      const file = `${asset}-${face}.ttf`;
+      if (!files[file]) {
+        const data = new Uint8Array(await fontBytes(asset, face));
+        let binary = "";
+        for (let i = 0; i < data.length; i += 8192) binary += String.fromCharCode(...data.subarray(i, i + 8192));
+        files[file] = btoa(binary);
+      }
+      return [name, file];
+    })));
+  })]);
+  return { files, definitions };
 }
 
 function buildTable(node: JSONContent, available: number, images: Assets): Block | null {
@@ -185,19 +220,20 @@ function paginateSections(nodes: JSONContent[], assets: Assets) {
 
 export async function generateCreatedPdf(document: JSONContent) {
   const images: Assets = new Map();
-  const [{ default: pdfmake }, { default: vfs }, { default: times }, { default: courier }, { default: helvetica }] = await Promise.all([
-    import("pdfmake/build/pdfmake"), import("pdfmake/build/vfs_fonts"),
+  const [{ default: pdfmake }, { default: times }, { default: courier }, { default: helvetica }, fonts] = await Promise.all([
+    import("pdfmake/build/pdfmake"),
     import("pdfmake/build/standard-fonts/Times"), import("pdfmake/build/standard-fonts/Courier"),
-    import("pdfmake/build/standard-fonts/Helvetica"), prepareImages(document.content ?? [], images),
+    import("pdfmake/build/standard-fonts/Helvetica"), prepareFonts(document), prepareImages(document.content ?? [], images),
   ]);
-  pdfmake.addVirtualFileSystem(vfs);
+  pdfmake.addVirtualFileSystem(fonts.files);
+  pdfmake.addFonts(fonts.definitions);
   pdfmake.addFontContainer(times);
   pdfmake.addFontContainer(courier);
   pdfmake.addFontContainer(helvetica);
   const content = paginateSections(document.content ?? [], images);
   return pdfmake.createPdf({
     content: content.length ? content : [{ text: " " }], pageSize: "A4", pageMargins: [48, 48, 48, 48],
-    defaultStyle: { font: "Roboto", fontSize: 12, color: "#222222", lineHeight: 1.15 },
+    defaultStyle: { font: defaultDraftFont.pdf, fontSize: 12, color: "#222222", lineHeight: 1.15 },
     info: { title: "samPDF document", creator: "samPDF" },
   }).getBlob();
 }

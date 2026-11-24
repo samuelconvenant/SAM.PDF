@@ -1,16 +1,18 @@
 "use client";
 
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { PointerEvent } from "react";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronLeft, ChevronRight, Crop, Download, Ellipsis, Files, ImagePlus, Minus, MousePointer2, Move, Plus, Redo2, RotateCw, Scaling, Trash2, Type, Undo2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bold, ChevronLeft, ChevronRight, Crop, Download, Ellipsis, Files, ImagePlus, Italic, Minus, MousePointer2, Move, Plus, Redo2, RotateCw, Scaling, Trash2, Type, Underline, Undo2 } from "lucide-react";
 import type { Bounds, EditorPage, Overlay, Point } from "../lib/editor-types";
 import type { PageEdit } from "../lib/pdf-protocol";
 import { PagePreviews, PageThumbnail, PdfCanvas } from "./page-preview";
 import type { PageGeometry } from "./page-preview";
 import { readDocumentImage } from "../lib/document-image";
-import { clamp, moveOverlay, overlayFonts, photoLayout, resizeEdges, resizeOverlay, textBoxLines } from "../lib/overlay-layout";
-import type { OverlayFont, ResizeEdge } from "../lib/overlay-layout";
+import { clamp, moveOverlay, overlayFont, photoLayout, resizeEdges, resizeOverlay, textBoxLines } from "../lib/overlay-layout";
+import type { ResizeEdge } from "../lib/overlay-layout";
+import { prepareOverlayFont } from "../lib/document-fonts";
+import { ColorControl, FontControl, FontSizeControl } from "./draft-format-controls";
 
 type Mode = "select" | Exclude<Overlay["kind"], "image">;
 type MobilePanel = "pages" | "more" | "text" | "move" | "resize" | "style" | "crop";
@@ -18,7 +20,7 @@ type History = { past: EditorPage[][]; present: EditorPage[]; future: EditorPage
 const modeNames = { select: "Select", text: "Text", rectangle: "Rectangle", highlight: "Highlight", ink: "Draw", image: "Image" };
 const modes: Mode[] = ["select", "text", "rectangle", "highlight", "ink"];
 const colorFor = (kind: Overlay["kind"]) => kind === "highlight" ? "#efd34e" : "#872922";
-const fontNames: Record<OverlayFont, string> = { Helvetica: "Sans serif", "Times-Roman": "Serif", Courier: "Monospace" };
+const textStyles = [["bold", "Bold", Bold], ["italic", "Italic", Italic], ["underline", "Underline", Underline]] as const;
 const pointsPerMillimeter = 72 / 25.4;
 const cropSides = ["left", "top", "right", "bottom"] as const;
 
@@ -40,8 +42,8 @@ function selectionHandles(box: Bounds, pageHeight: number, unit: number) {
   ];
 }
 
-const Mark = memo(function Mark({ value, width, height, selected, unit }: {
-  value: Overlay; width: number; height: number; selected: boolean; unit: number;
+const Mark = memo(function Mark({ value, width, height, selected, unit, editing = false }: {
+  value: Overlay; width: number; height: number; selected: boolean; unit: number; editing?: boolean;
 }) {
   const x = value.x * width;
   const y = value.y * height;
@@ -49,15 +51,20 @@ const Mark = memo(function Mark({ value, width, height, selected, unit }: {
   const boxHeight = value.height * height;
   const boxed = value.kind === "text" || value.kind === "image";
   const fit = value.photo ? photoLayout(value, boxWidth, boxHeight) : null;
+  const lines = useMemo(() => value.kind === "text" && !editing ? textBoxLines(value, boxWidth, boxHeight) : [], [value.text, value.kind, value.size, value.font, value.bold, value.italic, boxWidth, boxHeight, editing]);
   const points = value.points.map((point) => `${(point.x + value.x) * width},${(point.y + value.y) * height}`).join(" ");
   return <g className="editor-mark" data-overlay-id={value.id} data-overlay-kind={value.kind} data-selected={selected}>
     {boxed ? <>
       <svg x={x} y={y} width={boxWidth} height={boxHeight} overflow="hidden" className="editor-box-content">
         <rect width={boxWidth} height={boxHeight} fill={value.cover ? "white" : "transparent"} />
         {fit && value.photo ? <image href={value.photo.data} {...fit} preserveAspectRatio="none" /> :
-          <text fill={value.color} fontFamily={overlayFonts[value.font ?? "Helvetica"]} fontSize={value.size}>
-            {textBoxLines(value, boxWidth, boxHeight).map((line, index) => <tspan x={line.x} y={line.y} key={index}>{line.text}</tspan>)}
-          </text>}
+          !editing && <>
+            {value.highlight && lines.map((line, index) => <rect key={index} x={line.x} y={line.y - line.ascent} width={line.width} height={line.height} fill={value.highlight} />)}
+            <text fill={value.color} fontFamily={overlayFont(value).family.css} fontSize={value.size} fontWeight={value.bold ? 700 : 400} fontStyle={value.italic ? "italic" : "normal"}>
+              {lines.map((line, index) => <tspan x={line.x} y={line.y} key={index}>{line.text}</tspan>)}
+            </text>
+            {value.underline && lines.map((line, index) => <path key={index} d={`M${line.x} ${line.y + value.size * .12}h${line.width}`} stroke={value.color} strokeWidth={value.size * .05} />)}
+          </>}
       </svg>
       {selected && <>
         <rect className="editor-object-outline" x={x} y={y} width={boxWidth} height={boxHeight} fill="none" />
@@ -74,10 +81,10 @@ const Mark = memo(function Mark({ value, width, height, selected, unit }: {
   </g>;
 });
 
-function OverlayLayer({ geometry, page, mode, selected, busy, onAdd, onUpdate, onSelect, onPhoto, typing, onExitTyping, snapping }: {
+function OverlayLayer({ geometry, page, mode, selected, busy, onAdd, onUpdate, onSelect, onPhoto, typing, onEdit, onExitTyping, snapping }: {
   geometry: PageGeometry; page: EditorPage; mode: Mode; selected: number | null; busy: boolean;
   onAdd: (overlay: Omit<Overlay, "id">) => void; onUpdate: (id: number, patch: Partial<Overlay>) => void; onSelect: (id: number | null) => void;
-  onPhoto: (file: File, point: Point) => void; typing: number | null; onExitTyping: () => void; snapping: boolean;
+  onPhoto: (file: File, point: Point) => void; typing: number | null; onEdit: (id: number) => void; onExitTyping: () => void; snapping: boolean;
 }) {
   const group = useRef<SVGGElement>(null);
   const gesture = useRef<{ start: Point; draft: Overlay; original: Overlay; pointer: number; action: "draw" | "move" | ResizeEdge } | null>(null);
@@ -106,15 +113,16 @@ function OverlayLayer({ geometry, page, mode, selected, busy, onAdd, onUpdate, o
   }
 
   function capture(event: PointerEvent, overlay: Overlay, start: Point, action: "draw" | "move" | ResizeEdge) {
-    const handle = event.target instanceof HTMLElement && event.target.hasAttribute("data-touch-gesture") ? event.target : group.current?.ownerSVGElement;
-    handle?.setPointerCapture(event.pointerId);
+    const handle = event.target instanceof Element ? event.target.closest("[data-touch-gesture], [data-overlay-id]") : null;
+    const target = action === "draw" ? group.current?.ownerSVGElement : handle ?? group.current?.ownerSVGElement;
+    target?.setPointerCapture(event.pointerId);
     gesture.current = { start, draft: overlay, original: overlay, pointer: event.pointerId, action };
     setDraft(overlay);
   }
 
   const inline = page.overlays.find((item) => item.id === typing && item.kind === "text");
   const selection = draft?.id === selected ? draft : page.overlays.find((item) => item.id === selected);
-  const touchHandles = selection && !inline && (selection.kind === "text" || selection.kind === "image") ? selectionHandles({
+  const touchHandles = mode === "select" && !busy && selection && !inline && (selection.kind === "text" || selection.kind === "image") ? selectionHandles({
     x: selection.x * width, y: selection.y * height, width: selection.width * width, height: selection.height * height,
   }, height, unit) : [];
   function displayed(x: number, y: number) {
@@ -122,8 +130,21 @@ function OverlayLayer({ geometry, page, mode, selected, busy, onAdd, onUpdate, o
     return rotation === 90 ? { x: 1 - vertical, y: horizontal } : rotation === 180 ? { x: 1 - horizontal, y: 1 - vertical }
       : rotation === 270 ? { x: vertical, y: 1 - horizontal } : { x: horizontal, y: vertical };
   }
+  const body = selection && !inline && selection.kind === "text" && touchHandles.length ? [
+    displayed(selection.x * width, selection.y * height),
+    displayed((selection.x + selection.width) * width, (selection.y + selection.height) * height),
+  ] : null;
 
   return <div className="editor-input" data-mode={mode}
+    onDoubleClick={(event) => {
+      if (mode !== "select" || busy || !(event.target instanceof Element)) return;
+      const element = event.target.closest("[data-overlay-id]");
+      const id = Number(element?.getAttribute("data-overlay-id"));
+      if (page.overlays.some((item) => item.id === id && item.kind === "text") && !event.target.closest("textarea, [data-gesture], [data-touch-gesture]:not(.editor-touch-body)")) {
+        event.preventDefault();
+        onEdit(id);
+      }
+    }}
     onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
     onDrop={(event) => {
       const point = position(event);
@@ -196,18 +217,21 @@ function OverlayLayer({ geometry, page, mode, selected, busy, onAdd, onUpdate, o
         {Math.abs(draft.x + draft.width / 2 - .5) < .00001 && <path d={`M${width / 2} 0V${height}`} />}
         {Math.abs(draft.y + draft.height / 2 - .5) < .00001 && <path d={`M0 ${height / 2}H${width}`} />}
       </g>}
-      {page.overlays.map((item) => <Mark key={item.id} value={draft?.id === item.id ? draft : item} width={width} height={height} unit={unit} selected={selected === item.id && typing !== item.id} />)}
+      {page.overlays.map((item) => <Mark key={item.id} value={draft?.id === item.id ? draft : item} width={width} height={height} unit={unit} selected={selected === item.id && typing !== item.id} editing={typing === item.id} />)}
       {draft?.id === 0 && <Mark value={draft} width={width} height={height} unit={unit} selected={false} />}
       {inline && <foreignObject x={inline.x * width} y={inline.y * height} width={inline.width * width} height={inline.height * height} className="editor-inline-box" onPointerDown={(event) => event.stopPropagation()}>
         <textarea aria-label="Type in text box" autoFocus value={inline.text} maxLength={1000} spellCheck={false}
-          style={{ color: inline.color, fontFamily: overlayFonts[inline.font ?? "Helvetica"], fontSize: inline.size }}
+          style={{ color: inline.color, fontFamily: overlayFont(inline).family.css, fontSize: inline.size, fontWeight: inline.bold ? 700 : 400,
+            fontStyle: inline.italic ? "italic" : "normal", textDecoration: inline.underline ? "underline" : "none" }}
           onChange={(event) => onUpdate(inline.id, { text: event.currentTarget.value })}
-          onFocus={(event) => event.currentTarget.select()}
           onKeyDown={(event) => { if (event.key === "Escape") onExitTyping(); }}
           onBlur={onExitTyping} />
       </foreignObject>}
     </g>
     </svg>
+    {body && <span aria-hidden="true" className="editor-touch-handle editor-touch-body" data-touch-gesture="move" data-overlay-id={selection?.id}
+      style={{ left: `${(body[0].x + body[1].x) * 50}%`, top: `${(body[0].y + body[1].y) * 50}%`,
+        width: `${Math.abs(body[0].x - body[1].x) * 100}%`, height: `${Math.abs(body[0].y - body[1].y) * 100}%` }} />}
     {touchHandles.map((control) => {
       const point = displayed(control.x, control.y);
       const size = control.radius * 2 / unit;
@@ -253,7 +277,9 @@ export default function PdfEditor({ file, pages, busy, onChange, onPreview, onRe
     setPanel(null);
   }
   function update(id: number, patch: Partial<Overlay>) {
-    editPage({ overlays: page.overlays.map((item) => item.id === id ? { ...item, ...patch } : item) });
+    commit((previous) => previous.map((item) => item.index === page.index ? {
+      ...item, overlays: item.overlays.map((overlay) => overlay.id === id ? { ...overlay, ...patch } : overlay),
+    } : item));
   }
   function add(overlay: Omit<Overlay, "id">, typeOnPage = false) {
     const id = ++counter.current;
@@ -396,7 +422,7 @@ export default function PdfEditor({ file, pages, busy, onChange, onPreview, onRe
           const active = displayedPage === page.index;
           return visible && <OverlayLayer key={displayedPage} geometry={geometry} page={visible} mode={mode}
             selected={active ? selected : null} busy={busy || !active} onAdd={(item) => add(item, mode === "text")} onUpdate={update}
-            onSelect={selectMark} onPhoto={(file, point) => void addPhoto(file, point)} typing={active ? typing : null} onExitTyping={() => setTyping(null)} snapping={snapping} />;
+            onSelect={selectMark} onPhoto={(file, point) => void addPhoto(file, point)} typing={active ? typing : null} onEdit={(id) => { setSelected(id); setTyping(id); }} onExitTyping={() => setTyping(null)} snapping={snapping} />;
         }} />
         <aside className="editor-properties" aria-label="Overlay properties">
           <h3 className="desktop-editor">Page additions</h3>
@@ -411,12 +437,14 @@ export default function PdfEditor({ file, pages, busy, onChange, onPreview, onRe
             {mark.kind === "text" && <>
               <label className="field" data-section="text">Overlay text<textarea ref={mobileText} maxLength={1000} disabled={busy} value={mark.text} onChange={(event) => update(mark.id, { text: event.currentTarget.value })} /></label>
               <button type="button" className="button secondary compact desktop-editor" disabled={busy} onClick={() => setTyping(mark.id)}>Type on page</button>
-              <label className="field" data-section="style">Text font<select disabled={busy} value={mark.font ?? "Helvetica"} onChange={(event) => update(mark.id, { font: event.currentTarget.value as OverlayFont })}>
-                {Object.entries(fontNames).map(([value, name]) => <option value={value} key={value}>{name}</option>)}
-              </select></label>
-              <label className="field" data-section="style">Font size <select aria-label="Font size" disabled={busy} value={mark.size} onChange={(event) => update(mark.id, { size: Number(event.currentTarget.value) })}>
-                {[8, 10, 12, 14, 16, 18, 20, 24, 30, 36, 48, 60].map((size) => <option key={size} value={size}>{size} pt</option>)}
-              </select></label>
+              <div data-section="style"><FontControl key={mark.id} disabled={busy} value={overlayFont(mark).family.name} prepare={prepareOverlayFont}
+                apply={(font) => update(mark.id, { font: font.name })} /></div>
+              <div data-section="style"><FontSizeControl disabled={busy} value={`${mark.size}pt`} apply={(size) => update(mark.id, { size: size ? Number.parseFloat(size) : 20 })} /></div>
+              <div className="overlay-font-toggles" data-section="style" role="group" aria-label="Text style">
+                {textStyles.map(([key, label, Icon]) => <button key={key} type="button" className="icon-button" aria-label={label} aria-pressed={!!mark[key]}
+                  disabled={busy} onClick={() => update(mark.id, { [key]: !mark[key] })}><Icon size={17} aria-hidden="true" /></button>)}
+              </div>
+              <div data-section="style"><ColorControl highlight disabled={busy} value={mark.highlight ?? ""} apply={(value) => update(mark.id, { highlight: value ?? undefined })} /></div>
               <label className="editor-toggle" data-section="style"><input type="checkbox" disabled={busy} checked={!!mark.cover} onChange={(event) => update(mark.id, { cover: event.currentTarget.checked })} /> White background</label>
               {mark.cover && <p data-section="style">This covers what you see. The original text remains searchable and extractable.</p>}
             </>}

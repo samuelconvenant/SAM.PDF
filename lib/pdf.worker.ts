@@ -1,29 +1,59 @@
 import { PDFDocument, degrees, rgb, pushGraphicsState, popGraphicsState, rectangle, clip, endPath } from "pdf-lib";
-import type { PDFPage } from "pdf-lib";
+import type { PDFFont, PDFPage, StandardFonts } from "pdf-lib";
 import { zipSync } from "fflate";
 import { maxBytes, maxFiles } from "./tools";
 import type { Job, JobResult } from "./pdf-protocol";
 import type { Overlay } from "./editor-types";
-import { photoLayout, textBoxLines } from "./overlay-layout";
+import { overlayFont, photoLayout, textBoxLines } from "./overlay-layout";
+import { assertFontCoverage, fontBytes, loadFontMetrics } from "./document-fonts";
+import { standardPostScript } from "./draft-fonts";
+
+function pdfColor(value: string) {
+  const hex = Number.parseInt(value.slice(1), 16);
+  return rgb((hex >> 16) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255);
+}
+
+const overlayFonts = new WeakMap<PDFDocument, Map<string, Promise<PDFFont>>>();
+
+function embedOverlayFont(pdf: PDFDocument, overlay: Overlay) {
+  const { family, face } = overlayFont(overlay);
+  const key = `${family.pdf}:${face}`;
+  let cache = overlayFonts.get(pdf);
+  if (!cache) { cache = new Map(); overlayFonts.set(pdf, cache); }
+  let pending = cache.get(key);
+  if (!pending) {
+    const asset = family.asset;
+    pending = asset ? Promise.all([import("@pdf-lib/fontkit"), fontBytes(asset, face)]).then(([{ default: fontkit }, bytes]) => {
+      pdf.registerFontkit(fontkit);
+      return pdf.embedFont(bytes, { subset: true });
+    }) : pdf.embedFont(standardPostScript(family, face) as StandardFonts);
+    cache.set(key, pending);
+  }
+  return pending;
+}
 
 async function drawOverlay(pdf: PDFDocument, page: PDFPage, overlay: Overlay) {
   const box = page.getCropBox();
   const x = (value: number) => box.x + value * box.width;
   const y = (value: number) => box.y + (1 - value) * box.height;
-  const hex = Number.parseInt(overlay.color.slice(1), 16);
-  const color = rgb((hex >> 16) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255);
+  const color = pdfColor(overlay.color);
   const width = overlay.width * box.width;
   const height = overlay.height * box.height;
   const left = x(overlay.x);
   const top = y(overlay.y);
   if (overlay.kind === "text") {
-    const font = await pdf.embedFont(overlay.font ?? "Helvetica");
-    try { font.encodeText(overlay.text.replace(/[\r\n\t]/g, "")); }
-    catch { throw new Error("A text box contains characters outside the standard Latin PDF font. Edit the text and try again."); }
+    const { family, face } = overlayFont(overlay);
+    const [font, metrics] = await Promise.all([embedOverlayFont(pdf, overlay), loadFontMetrics(family, face)]);
+    assertFontCoverage(family, metrics, overlay.text);
     if (overlay.cover) page.drawRectangle({ x: left, y: top - height, width, height, color: rgb(1, 1, 1) });
     page.pushOperators(pushGraphicsState(), rectangle(left, top - height, width, height), clip(), endPath());
-    for (const line of textBoxLines(overlay, width, height)) {
-      if (line.text) page.drawText(line.text, { x: left + line.x, y: top - line.y, font, size: overlay.size, color });
+    for (const line of textBoxLines(overlay, width, height, metrics)) {
+      if (!line.text) continue;
+      const x = left + line.x;
+      const y = top - line.y;
+      if (overlay.highlight) page.drawRectangle({ x, y: y + line.ascent - line.height, width: line.width, height: line.height, color: pdfColor(overlay.highlight) });
+      page.drawText(line.text, { x, y, font, size: overlay.size, color });
+      if (overlay.underline) page.drawLine({ start: { x, y: y - overlay.size * .12 }, end: { x: x + line.width, y: y - overlay.size * .12 }, thickness: overlay.size * .05, color });
     }
     page.pushOperators(popGraphicsState());
   } else if (overlay.kind === "image" && overlay.photo) {

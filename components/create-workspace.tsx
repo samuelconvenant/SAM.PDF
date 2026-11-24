@@ -1,22 +1,25 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EditorContent, Node, useEditor, useEditorState } from "@tiptap/react";
+import type { Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { TextStyleKit } from "@tiptap/extension-text-style";
 import TextAlign from "@tiptap/extension-text-align";
 import { NodeSelection } from "@tiptap/pm/state";
-import { Bold, Italic, Underline, List, ListOrdered, Undo2, Redo2, FilePlus, ImagePlus, Table2 } from "lucide-react";
+import { Bold, Italic, Underline, List, ListOrdered, Undo2, Redo2, FilePlus, ImagePlus, Table2, Save, FolderOpen, Settings2 } from "lucide-react";
 import { readDocumentImage } from "../lib/document-image";
 import type { PreviewOutput } from "./document-preview";
 import { draftImage } from "../lib/draft-image-geometry";
-import { findDraftFont } from "../lib/draft-fonts";
+import { defaultDraftFont, findDraftFont } from "../lib/draft-fonts";
+import { ensureBrowserFont } from "../lib/document-fonts";
 import { PaperImage } from "./draft-image";
 import { draftTableExtensions } from "./draft-table";
 import { tableFormatting } from "../lib/draft-table-format";
 import { ColorControl, FontControl, FontSizeControl } from "./draft-format-controls";
 import { DraftImageControls, DraftTableControls } from "./draft-object-controls";
+import { addDraftPage, alignDraft, capitalizePreference, DraftWriting, readDraftFile, saveDraftFile } from "./draft-writing";
 
 const Preview = dynamic(() => import("./document-preview"), { ssr: false });
 const PaperBreak = Node.create({
@@ -35,9 +38,40 @@ const extensions = [
 ];
 const retainScroll = { scrollIntoView: false };
 
+function toolbarState(editor: Editor | null) {
+  if (!editor) return null;
+  const style = editor.getAttributes("textStyle");
+  const heading = editor.getAttributes("heading").level as number | undefined;
+  const paragraphAttrs = editor.getAttributes(heading ? "heading" : "paragraph");
+  const image = editor.isActive("image") ? editor.getAttributes("image") : null;
+  const inTable = editor.isActive("table");
+  const cell = editor.isActive("tableHeader") ? editor.getAttributes("tableHeader") : editor.getAttributes("tableCell");
+  return {
+    bold: editor.isActive("bold"), italic: editor.isActive("italic"), underline: editor.isActive("underline"),
+    bullets: editor.isActive("bulletList"), numbers: editor.isActive("orderedList"),
+    table: inTable ? { ...tableFormatting(editor.getAttributes("table")), background: cell.background ?? "#ffffff",
+      cellAlign: cell.cellAlign ?? "left", vertical: cell.vertical ?? "top", merge: editor.can().mergeCells(), split: editor.can().splitCell() } : null,
+    undo: editor.can().undo(), redo: editor.can().redo(),
+    font: findDraftFont(style.fontFamily).name,
+    size: (style.fontSize ?? "") as string,
+    color: (style.color ?? "#222222") as string,
+    highlight: (style.backgroundColor ?? "") as string,
+    heading: String(heading ?? 0), alignment: (paragraphAttrs.textAlign ?? "left") as string,
+    image: image ? draftImage(image) : null,
+  };
+}
+
 export function CreateWorkspace() {
+  const [autoCapitalize, setAutoCapitalize] = useState(true);
+  const capitalizationEnabled = useRef(true);
+  const [draftMessage, setDraftMessage] = useState("");
+  const draftFile = useRef<HTMLInputElement>(null);
+  const writing = useMemo(() => DraftWriting.configure({
+    capitalizationEnabled: () => capitalizationEnabled.current,
+    save: (editor) => { saveDraftFile(editor); setDraftMessage("Draft downloaded."); },
+  }), []);
   const editor = useEditor({
-    extensions,
+    extensions: [...extensions, writing],
     content: "<p></p>",
     immediatelyRender: false,
     shouldRerenderOnTransaction: false,
@@ -45,28 +79,7 @@ export function CreateWorkspace() {
       attributes: { class: "create-document", role: "textbox", "aria-label": "Document page", "aria-multiline": "true" },
     },
   });
-  const state = useEditorState({ editor, selector: ({ editor }) => {
-    if (!editor) return null;
-    const style = editor.getAttributes("textStyle");
-    const heading = editor.getAttributes("heading").level as number | undefined;
-    const paragraphAttrs = editor.getAttributes(heading ? "heading" : "paragraph");
-    const image = editor.isActive("image") ? editor.getAttributes("image") : null;
-    const inTable = editor.isActive("table");
-    const cell = editor.isActive("tableHeader") ? editor.getAttributes("tableHeader") : editor.getAttributes("tableCell");
-    return {
-      bold: editor.isActive("bold"), italic: editor.isActive("italic"), underline: editor.isActive("underline"),
-      bullets: editor.isActive("bulletList"), numbers: editor.isActive("orderedList"),
-      table: inTable ? { ...tableFormatting(editor.getAttributes("table")), background: cell.background ?? "#ffffff",
-        cellAlign: cell.cellAlign ?? "left", vertical: cell.vertical ?? "top", merge: editor.can().mergeCells(), split: editor.can().splitCell() } : null,
-      undo: editor.can().undo(), redo: editor.can().redo(),
-      font: findDraftFont(style.fontFamily).name,
-      size: (style.fontSize ?? "") as string,
-      color: (style.color ?? "#222222") as string,
-      highlight: (style.backgroundColor ?? "") as string,
-      heading: String(heading ?? 0), alignment: (paragraphAttrs.textAlign ?? "left") as string,
-      image: image ? draftImage(image) : null,
-    };
-  } });
+  const state = useEditorState({ editor, selector: ({ editor }) => toolbarState(editor) }) ?? toolbarState(editor);
   const [output, setOutput] = useState<PreviewOutput | null>(null);
   const outputDocument = useRef<object | null>(null);
   const [open, setOpen] = useState(false);
@@ -78,7 +91,35 @@ export function CreateWorkspace() {
   const job = useRef(false);
   const mounted = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => { void ensureBrowserFont(defaultDraftFont).catch(() => {}); }, []);
+  useEffect(() => {
+    try { if (localStorage.getItem(capitalizePreference) === "off") { capitalizationEnabled.current = false; setAutoCapitalize(false); } } catch {}
+  }, []);
   useEffect(() => { if (output) return () => URL.revokeObjectURL(output.url); }, [output]);
+
+  async function openDraft(file: File) {
+    if (!editor || job.current) return;
+    const current = editor.state.doc;
+    job.current = true;
+    setStatus("Opening draft…");
+    setError("");
+    setDraftMessage("");
+    try {
+      const draft = await readDraftFile(file, editor);
+      await Promise.all(draft.fonts.map((name) => ensureBrowserFont(findDraftFont(name))));
+      if (!mounted.current || editor.isDestroyed) return;
+      if (editor.state.doc !== current) throw new Error("The current document changed during loading. Open the draft again to replace it.");
+      if (!editor.isEmpty && !window.confirm("Replace this document with the saved draft?")) return;
+      editor.commands.setContent(draft.document, { errorOnInvalidContent: true });
+      editor.commands.focus(undefined, retainScroll);
+      setDraftMessage("Saved draft opened.");
+    } catch (caught) {
+      if (mounted.current) setError(caught instanceof SyntaxError ? "Choose a draft saved by samPDF." : caught instanceof Error ? caught.message : "The draft could not be opened.");
+    } finally {
+      job.current = false;
+      if (mounted.current) setStatus("");
+    }
+  }
 
   async function insertPicture(file: File, replace: boolean) {
     if (!editor || job.current) return;
@@ -151,22 +192,22 @@ export function CreateWorkspace() {
     </header>
     {editor && state && <>
       <div className="preview-tools create-toolbar" role="group" aria-label="Document formatting">
-        <button type="button" className="icon-button" aria-label="Undo" disabled={!state.undo || !!status} onClick={() => editor.chain().focus().undo().run()}><Undo2 size={18} /></button>
-        <button type="button" className="icon-button" aria-label="Redo" disabled={!state.redo || !!status} onClick={() => editor.chain().focus().redo().run()}><Redo2 size={18} /></button>
+        <button type="button" className="icon-button" aria-label="Undo" title="Undo (Ctrl/⌘+Z)" disabled={!state.undo || !!status} onClick={() => editor.chain().focus().undo().run()}><Undo2 size={18} /></button>
+        <button type="button" className="icon-button" aria-label="Redo" title="Redo (Ctrl/⌘+Y or Ctrl/⌘+Shift+Z)" disabled={!state.redo || !!status} onClick={() => editor.chain().focus().redo().run()}><Redo2 size={18} /></button>
         <label><span className="sr-only">Paragraph style</span><select value={state.heading} disabled={!!status} onChange={(event) => {
           const level = Number(event.currentTarget.value);
           if (level === 1 || level === 2 || level === 3) editor.chain().focus().setHeading({ level }).run();
           else editor.chain().focus().setParagraph().run();
         }}><option value="0">Paragraph</option>{[1, 2, 3].map((level) => <option key={level} value={level}>Heading {level}</option>)}</select></label>
-        <FontControl value={state.font} disabled={!!status} apply={(font) => editor.chain().focus(undefined, retainScroll).setFontFamily(font).run()} />
+        <FontControl value={state.font} disabled={!!status} apply={(font) => editor.chain().focus(undefined, retainScroll).setFontFamily(font.css).run()} />
         <FontSizeControl value={state.size} disabled={!!status} apply={(size) => {
           const chain = editor.chain().focus(undefined, retainScroll);
           if (size) chain.setFontSize(size).run();
           else chain.unsetFontSize().run();
         }} />
-        <button type="button" className="icon-button" aria-label="Bold" disabled={!!status} aria-pressed={state.bold} onMouseDown={(event) => event.preventDefault()} onClick={() => editor.chain().focus().toggleBold().run()}><Bold size={17} /></button>
-        <button type="button" className="icon-button" aria-label="Italic" disabled={!!status} aria-pressed={state.italic} onMouseDown={(event) => event.preventDefault()} onClick={() => editor.chain().focus().toggleItalic().run()}><Italic size={17} /></button>
-        <button type="button" className="icon-button" aria-label="Underline" disabled={!!status} aria-pressed={state.underline} onMouseDown={(event) => event.preventDefault()} onClick={() => editor.chain().focus().toggleUnderline().run()}><Underline size={17} /></button>
+        <button type="button" className="icon-button" aria-label="Bold" title="Bold (Ctrl/⌘+B)" disabled={!!status} aria-pressed={state.bold} onMouseDown={(event) => event.preventDefault()} onClick={() => editor.chain().focus().toggleBold().run()}><Bold size={17} /></button>
+        <button type="button" className="icon-button" aria-label="Italic" title="Italic (Ctrl/⌘+I)" disabled={!!status} aria-pressed={state.italic} onMouseDown={(event) => event.preventDefault()} onClick={() => editor.chain().focus().toggleItalic().run()}><Italic size={17} /></button>
+        <button type="button" className="icon-button" aria-label="Underline" title="Underline (Ctrl/⌘+U)" disabled={!!status} aria-pressed={state.underline} onMouseDown={(event) => event.preventDefault()} onClick={() => editor.chain().focus().toggleUnderline().run()}><Underline size={17} /></button>
         <ColorControl value={state.color} disabled={!!status} apply={(color) => {
           const chain = editor.chain().focus(undefined, retainScroll);
           if (color) chain.setColor(color).run();
@@ -177,17 +218,14 @@ export function CreateWorkspace() {
           if (color) chain.setBackgroundColor(color).run();
           else chain.unsetBackgroundColor().run();
         }} />
-        <label><span className="sr-only">Text alignment</span><select disabled={!!status} value={state.alignment} onChange={(event) => {
-          const marks = editor.state.storedMarks;
-          editor.chain().focus().setTextAlign(event.currentTarget.value).command(({ tr }) => {
-            if (marks) tr.setStoredMarks(marks);
-            return true;
-          }).run();
+        <label><span className="sr-only">Text alignment</span><select title="Ctrl/⌘+L for left, E for centre, R for right, J to justify" disabled={!!status} value={state.alignment} onChange={(event) => {
+          alignDraft(editor, event.currentTarget.value);
+          editor.commands.focus(undefined, retainScroll);
         }}>
           <option value="left">Align left</option><option value="center">Centre</option><option value="right">Align right</option><option value="justify">Justify</option>
         </select></label>
-        <button type="button" className="icon-button" aria-label="Bullet list" disabled={!!status} aria-pressed={state.bullets} onClick={() => editor.chain().focus().toggleBulletList().run()}><List size={18} /></button>
-        <button type="button" className="icon-button" aria-label="Numbered list" disabled={!!status} aria-pressed={state.numbers} onClick={() => editor.chain().focus().toggleOrderedList().run()}><ListOrdered size={18} /></button>
+        <button type="button" className="icon-button" aria-label="Bullet list" title="Bullet list (Ctrl/⌘+Shift+8)" disabled={!!status} aria-pressed={state.bullets} onClick={() => editor.chain().focus().toggleBulletList().run()}><List size={18} /></button>
+        <button type="button" className="icon-button" aria-label="Numbered list" title="Numbered list (Ctrl/⌘+Shift+7)" disabled={!!status} aria-pressed={state.numbers} onClick={() => editor.chain().focus().toggleOrderedList().run()}><ListOrdered size={18} /></button>
       </div>
       <div className="preview-tools create-toolbar" role="group" aria-label="Insert content">
         <button className="button secondary compact" type="button" disabled={!!status} onClick={() => editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: true }).run()}><Table2 size={16} aria-hidden="true" /> Insert table</button>
@@ -198,7 +236,24 @@ export function CreateWorkspace() {
           replacing.current = false;
         }} />
         <button className="button secondary compact" type="button" disabled={!!status} onClick={() => { replacing.current = false; imageInput.current?.click(); }}><ImagePlus size={16} aria-hidden="true" /> Insert image</button>
-        <button className="button secondary compact" type="button" disabled={!!status || !!state.table} onClick={() => editor.chain().focus().insertContent([{ type: "pageBreak" }, { type: "paragraph" }]).run()}><FilePlus size={16} aria-hidden="true" /> Add page</button>
+        <button className="button secondary compact" type="button" title="Add page (Ctrl/⌘+Enter)" disabled={!!status || !!state.table} onClick={() => { addDraftPage(editor); editor.commands.focus(); }}><FilePlus size={16} aria-hidden="true" /> Add page</button>
+        <button className="button secondary compact" type="button" title="Save draft (Ctrl/⌘+S)" onClick={() => writing.options.save(editor)}><Save size={16} aria-hidden="true" /> Save draft</button>
+        <button className="button secondary compact" type="button" disabled={!!status} onClick={() => draftFile.current?.click()}><FolderOpen size={16} aria-hidden="true" /> Open draft</button>
+        <input type="file" hidden ref={draftFile} aria-label="Upload saved samPDF draft" accept=".json,application/json" onChange={(event) => {
+          const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void openDraft(file);
+        }} />
+        <details className="create-menu" onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+        }}>
+          <summary aria-label="Writing settings"><Settings2 size={15} aria-hidden="true" /> Writing settings</summary>
+          <div className="create-popover"><label className="editor-toggle"><input type="checkbox" checked={autoCapitalize} onChange={(event) => {
+            const enabled = event.currentTarget.checked;
+            capitalizationEnabled.current = enabled;
+            setAutoCapitalize(enabled);
+            try { localStorage.setItem(capitalizePreference, enabled ? "on" : "off"); } catch {}
+          }} /> Auto-capitalize sentences</label></div>
+        </details>
+        <span className="sr-only" role="status">{draftMessage}</span>
       </div>
       <div className="create-context">
         {state.table && !state.image && <DraftTableControls editor={editor} state={state.table} disabled={!!status} />}

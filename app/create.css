@@ -27,6 +27,12 @@
 }
 .create-popover :is(input, select) { width: 100%; }
 .create-popover select option { padding: 4px 3px; }
+.recent-fonts { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+.recent-fonts .text-button { font-size: .75rem; }
+.editor-properties .create-popover { position: static; width: auto; max-width: none; margin-top: 3px; }
+.editor-properties .create-menu :is(input,select), .editor-properties .create-size { min-height: 34px; padding: 4px 6px; border: 1px solid #53452b; border-radius: 5px; background: #191919; color: var(--ink); }
+.overlay-font-toggles { display: flex; flex-wrap: wrap; gap: 3px; }
+.overlay-font-toggles [aria-pressed=true] { background: #342919; color: #f2e0b7; }
 .create-popover :is(small, p), .draft-control-hint { color: #bdb4a7; font-size: .73rem; margin: 0; }
 .color-dot { width: 12px; height: 12px; border: 1px solid #a79b87; border-radius: 3px; }
 .color-swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
@@ -37,12 +43,12 @@
 .create-document {
   background: #fff; color: #222; margin: 0; padding: 8%; min-height: min(1123px, 140vi);
   max-width: 100%; overflow-wrap: anywhere; box-shadow: 0 5px 24px #0008;
-  font: 12pt/1.5 Arial, sans-serif; caret-color: #151515;
+  font: 12pt/1.5 Roboto, Arial, sans-serif; caret-color: #151515;
   position: relative; isolation: isolate;
 }
 .create-document:focus { outline: 2px solid #a68a45; outline-offset: -2px; }
 .create-document p { margin: 0 0 .55em; min-height: 1.5em; }
-.create-document h1, .create-document h2, .create-document h3 { font: bold 28pt/1.15 Arial, sans-serif; margin: .28em 0 .22em; }
+.create-document h1, .create-document h2, .create-document h3 { font: bold 28pt/1.15 Roboto, Arial, sans-serif; margin: .28em 0 .22em; }
 .create-document h2 { font-size: 21pt; }
 .create-document h3 { font-size: 16pt; }
 .create-document [style*="font-family: Times"] { font-family: "Times New Roman", Times, serif !important; }

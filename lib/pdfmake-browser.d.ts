@@ -2,6 +2,7 @@ declare module "pdfmake/build/pdfmake" {
   const pdfmake: {
     addVirtualFileSystem(files: Record<string, string>): void;
     addFontContainer(container: object): void;
+    addFonts(fonts: Record<string, Record<string, string>>): void;
     createPdf(definition: object): { getBlob(): Promise<Blob> };
   };
   export default pdfmake;

@@ -420,8 +420,11 @@ try {
   await page.getByRole("button", { name: "Type on page" }).click();
   await page.getByRole("textbox", { name: "Type in text box" }).fill("Reviewed");
   await page.getByRole("textbox", { name: "Type in text box" }).press("Escape");
-  await page.getByLabel("Text font").selectOption("Times-Roman");
-  await page.getByLabel("Font size").selectOption("24");
+  await page.locator('summary[aria-label^="Font picker,"]').click();
+  await page.getByLabel("Search fonts").fill("Times");
+  await page.getByLabel("Font family", { exact: true }).selectOption("Times New Roman");
+  await page.getByLabel("Font size").fill("24");
+  await page.getByLabel("Font size").press("Enter");
   await page.getByLabel("Color", { exact: true }).fill("#005588");
   await page.getByLabel("Left %").fill("25");
   await page.getByRole("button", { name: "Undo", exact: true }).click();
