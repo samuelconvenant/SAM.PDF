@@ -7,10 +7,11 @@ import type { FieldCategory } from "./smart-understanding";
 type Match = { id: string; label: string; value: string; page: number; category?: FieldCategory };
 export type Target = Match & (
   | { kind: "field"; field: string; pages: number[] }
-  | { kind: "text"; line: TextCandidate; right?: number; origin: "selectable" | "inferred" | "ocr" }
+  | { kind: "text"; line: TextCandidate; right?: number; alignment?: "left" | "center" | "right"; origin: "selectable" | "inferred" | "ocr" }
 );
 type Row = { spans: TextCandidate[]; line: TextCandidate };
-type PageIndex = { page: number; rows: Row[]; fields: Target[]; selectable: boolean };
+type Block = { role: "heading" | "paragraph" | "columns"; rows: Row[] };
+type PageIndex = { page: number; rows: Row[]; blocks: Block[]; fields: Target[]; selectable: boolean };
 
 const indexes = new WeakMap<PDFDocumentProxy, Map<number, PageIndex>>();
 const scans = new WeakMap<PDFDocumentProxy, Map<number, PageIndex>>();
@@ -39,9 +40,42 @@ function makeRows(spans: TextCandidate[]) {
   });
 }
 
+function layoutBlocks(rows: Row[]) {
+  const sizes = rows.map(({ line }) => line.size).sort((a, b) => a - b);
+  const body = sizes[Math.floor(sizes.length / 2)] ?? 0;
+  const blocks: Block[] = [];
+  for (const row of rows) {
+    const { line, spans } = row;
+    const columns = spans.slice(1).filter((span, index) => span.rect.x - spans[index].rect.x - spans[index].rect.width > .045).length;
+    const role = columns >= 2 ? "columns" : line.size >= Math.max(14, body * 1.15) || line.rect.y < .2 && line.size >= 14 ?
+      "heading" : "paragraph";
+    const prior = blocks.at(-1);
+    const previous = prior?.rows.at(-1)?.line;
+    if (role === "paragraph" && prior?.role === role && previous && Math.abs(previous.size - line.size) <= 1 &&
+      Math.abs(previous.rect.x - line.rect.x) <= .028 && line.rect.y - previous.rect.y <= previous.rect.height * 1.55) {
+      prior.rows.push(row);
+    } else blocks.push({ role, rows: [row] });
+  }
+  return blocks;
+}
+
 function textTarget(page: number, label: string, line: TextCandidate, origin: "selectable" | "inferred" | "ocr", right?: number): Target {
   return { kind: "text", id: `${page}:${line.baseline.x.toFixed(5)}:${line.baseline.y.toFixed(5)}`, page, label,
-    value: line.text, category: fieldCategory(label), line, origin, right };
+    value: line.text, category: fieldCategory(label), line, origin, right,
+    alignment: label === "Heading" && Math.abs(line.rect.x + line.rect.width / 2 - .5) < .012 ? "center" : undefined };
+}
+
+function matchAlignment(targets: Target[]) {
+  return targets.map((target): Target => {
+    if (target.kind !== "text" || target.right !== undefined) return target;
+    const rect = target.line.rect;
+    const neighbors = targets.flatMap((other) => other !== target && other.kind === "text" &&
+      Math.abs(rect.y - other.line.rect.y) < .13 && Math.abs(rect.x - other.line.rect.x) > .015 ? [other.line.rect] : []);
+    const right = neighbors.filter((other) => Math.abs(other.x + other.width - rect.x - rect.width) < .008).length;
+    const centered = neighbors.filter((other) => Math.abs(other.x + other.width / 2 - rect.x - rect.width / 2) < .008).length;
+    const alignment = right >= 2 && right > centered ? "right" : centered >= 2 && centered > right ? "center" : target.alignment;
+    return { ...target, alignment };
+  });
 }
 
 function valuePart(span: TextCandidate, prefix: string, value: string) {
@@ -120,7 +154,7 @@ function findFields(rows: Row[], page: number, source: "selectable" | "ocr") {
   for (const row of rows) if (row.line.text.length < 32 && looksLikeDate(row.line.text) && !result.some((entry) => entry.value === row.line.text)) {
     result.push(textTarget(page, "Date", row.line, source === "ocr" ? "ocr" : "inferred"));
   }
-  return result;
+  return matchAlignment(result);
 }
 
 async function acroFields(page: PDFPageProxy, index: number) {
@@ -150,7 +184,7 @@ export async function documentPages(pdf: PDFDocumentProxy, signal: AbortSignal, 
         const line = textCandidate(page, item, content.styles[item.fontName]);
         return line ? [line] : [];
       }));
-      ready = { page: index, rows, selectable: content.items.some((item) => item.str.trim()), fields: [...widgets, ...findFields(rows, index, "selectable")] };
+      ready = { page: index, rows, blocks: layoutBlocks(rows), selectable: content.items.some((item) => item.str.trim()), fields: [...widgets, ...findFields(rows, index, "selectable")] };
       cache.set(index, ready);
     }
     pages.push(ready);
@@ -168,7 +202,7 @@ export async function scanPage(pdf: PDFDocumentProxy, page: number, signal: Abor
   const { recognizePage } = await import("./smart-ocr");
   const rows = (await recognizePage(await pdf.getPage(page + 1), signal)).filter((spans) => spans.length)
     .map((spans) => ({ spans, line: joined(spans) }));
-  const result = { page, rows, selectable: false, fields: findFields(rows, page, "ocr") };
+  const result = { page, rows, blocks: layoutBlocks(rows), selectable: false, fields: findFields(rows, page, "ocr") };
   cache.set(page, result);
   return result;
 }
@@ -179,10 +213,13 @@ export function candidates(pages: PageIndex[], label: string, exact?: string) {
   if (exact || category === "heading") {
     const choices: Target[] = [];
     for (const page of pages) {
-      const rows = exact ? page.rows.filter(({ line }) => line.text.trim() === exact.trim()) :
-        page.rows.filter(({ line }) => line.rect.y < .33 && line.size >= 14 && line.text.length <= 130);
+      const subtitle = clean === "subtitle" || clean === "subheading";
+      let rows = exact ? page.rows.filter(({ line }) => line.text.trim() === exact.trim()) :
+        page.blocks.filter(({ role }) => role === "heading").flatMap(({ rows }) => rows)
+          .filter(({ line }) => (subtitle || line.rect.y < .33) && line.text.length <= 130);
       const largest = Math.max(0, ...rows.map(({ line }) => line.size));
-      for (const { line } of rows) if (exact || line.size >= largest / 1.12) {
+      if (subtitle && !exact) rows = rows.filter(({ line }) => line.size < largest / 1.12);
+      for (const { line } of rows) if (exact || subtitle || line.size >= largest / 1.12) {
         choices.push(textTarget(page.page, exact ? "Text" : "Heading", line, page.selectable ? "selectable" : "ocr"));
       }
     }

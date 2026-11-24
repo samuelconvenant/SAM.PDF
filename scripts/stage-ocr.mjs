@@ -11,6 +11,8 @@ const files = {
   "eng.traineddata.gz": "@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz",
   "tesseract-license.md": "tesseract.js/LICENSE.md",
   "core-license.txt": "tesseract.js-core/LICENSE",
+  "pdfium-wrapper-license.txt": "@embedpdf/pdfium/LICENSE",
+  "pdfium-notices.txt": "@embedpdf/pdfium/LICENSE.pdfium",
 };
 await Promise.all(Object.entries(files).map(([name, source]) =>
   copyFile(new URL(`node_modules/${source}`, root), new URL(name, output))));

@@ -20,7 +20,7 @@ export default function Help() {
       <h2>What can I edit in an existing PDF?</h2>
       <p>Upload the PDF, then add and position text boxes and photos. You can use millimetre sizing and crop controls to fit a photo frame. A white box is a visual cover. The underlying text remains searchable and extractable.</p>
       <h2>How does Smart PDF Editor work?</h2>
-      <p>Describe the changes you want in English. Smart PDF Editor finds matching fields, asks you to choose when a match is uncertain, and previews the edited PDF before applying. Fillable fields can be updated directly. Flat text and OCR edits use a visual cover, so the originals remain recoverable. English OCR runs on your device when needed.</p>
+      <p>Describe the changes you want in English. Smart PDF Editor finds matching fields, asks you to choose when a match is uncertain, and previews the edited PDF before applying. Writable form fields and supported text runs are updated directly. OCR edits use a visual cover and leave the original scan recoverable. English OCR runs on your device when needed.</p>
       <h2>How does password protection work?</h2>
       <p>Protect PDF uses AES-256 encryption in your browser. A PDF reader will need the new password to open the encrypted file. Split PDF protection encrypts each PDF inside the ZIP. The ZIP container itself opens normally.</p>
       <h2>Why can’t I open a file?</h2>

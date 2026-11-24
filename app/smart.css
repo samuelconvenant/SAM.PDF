@@ -44,6 +44,11 @@
 .smart-changes dl div { display: grid; grid-template-columns: 4.5em minmax(0, 1fr); gap: .4em; }
 .smart-changes dt { color: var(--muted); }
 .smart-changes dd { margin: 0; }
+.smart-request { border-inline-start: 2px solid #a68146; padding-inline-start: 9px; }
+.smart-session ol { margin: 4px 0; max-height: 11rem; overflow: auto; padding-inline-start: 22px; }
+.smart-session li { padding-block: 5px; }
+.smart-session small { color: #e8d5a3; overflow-wrap: anywhere; }
+.smart-manual-link { text-decoration: underline; text-underline-offset: 2px; }
 .smart-photo-adjust fieldset {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

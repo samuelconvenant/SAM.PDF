@@ -7,25 +7,25 @@ const nlp = winkNLP(model, ["sbd", "pos", "ner"]);
 const tokens = (text: string) => nlp.readDoc(text).tokens();
 const actions = /^(change|update|correct|fix|replace|set|rename|amend|edit|revise|modify|make|increase|enlarge|reduce|move|shift|put|fill|enter|add|remove|delete|rotate|turn|insert|place|reorder|number|bold)$/;
 const assignment = /\s+(?:to|with|as|so (?:it|that it) reads?)\s*[,=:]?\s+|\s*[:=]\s*/i;
-const helpers = /^(?:(?:please|also|then|and|would you mind|could you|can you|would you|will you|i want (?:you )?to|i need (?:you )?to)\b[\s,:]+)+/i;
+const helpers = /^(?:(?:please|also|then|and|now|would you mind|could you|can you|would you|will you|i want (?:you )?to|i need (?:you )?to)\b[\s,:]+)+/i;
 const named = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth"];
 const cardinal = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
 const pageHint = /\s+(?:on|of|in|from)\s+(?:(?:the\s+)?(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last)\s+page|page\s+(\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten|last))\b/i;
 
 const fieldAliases = {
   name: ["name", "full name", "applicant name", "student name", "candidate name", "patient name", "customer name", "participant name", "legal name", "name of applicant", "name of student", "name of candidate"],
-  studentId: ["matric number", "matric no", "matriculation number", "matriculation no", "matric id", "registration number", "registration no", "student id", "student number", "student identification number"],
+  studentId: ["matric number", "matric no", "matriculation number", "matriculation no", "matric id", "registration number", "registration no", "student id", "student number", "student identification number", "enrollment code", "enrolment code", "registration code", "student code"],
   reference: ["reference", "reference no", "reference number", "ref", "ref no", "ref number", "reference id", "booking reference", "record number", "file reference"],
   date: ["date", "application date", "submission date", "document date", "signed date", "date signed", "issue date"],
   department: ["department", "department name", "program", "programme", "major", "course of study", "school department"],
   address: ["address", "old address", "mailing address", "street address", "postal address", "home address", "applicant address"],
-  heading: ["heading", "main heading", "document heading", "title", "document title", "main title", "headline"],
+  heading: ["heading", "main heading", "document heading", "title", "document title", "main title", "headline", "subheading", "subtitle"],
 } as const;
 export type FieldCategory = keyof typeof fieldAliases;
 export type Meaning =
-  | { kind: "value"; label: string; value: string; page?: number; exact?: string }
-  | { kind: "style"; label: string; style: Style; page?: number }
-  | { kind: "move_text"; direction: "up" | "down" | "left" | "right" }
+  | { kind: "value"; label: string; value?: string; page?: number; exact?: string; all?: boolean; relative?: "below" }
+  | { kind: "style"; label: string; style: Style; page?: number; original?: "font" | "formatting" }
+  | { kind: "move_text"; direction: "up" | "down" | "left" | "right"; both?: boolean; photo?: boolean }
   | { kind: "move_photo"; position: string }
   | { kind: "command"; command: Instruction };
 
@@ -88,7 +88,7 @@ export function looksLikeDate(value: string) {
 }
 
 function descriptor(value: string) {
-  return value.replace(/^(?:the|my|our|this|a|an|new)\s+/i, "").replace(/\s+(?:value|field|entry|box|changed|updated|corrected)$/i, "").trim();
+  return value.replace(/^(?:the|my|our|this|a|an|new)\s+/i, "").replace(/\s+(?:value|field|entry|box|changed|updated|corrected|at the top)$/i, "").trim();
 }
 
 function action(text: string) {
@@ -108,6 +108,20 @@ function action(text: string) {
   return null;
 }
 
+function fieldPhrase(subject: string) {
+  if (!subject || subject.length > 70) return false;
+  if (fieldCategory(descriptor(subject))) return true;
+  const parts = tokens(descriptor(subject));
+  const pos = parts.out(nlp.its.pos);
+  return pos.length <= 7 && pos.some((tag) => tag === "NOUN" || tag === "PROPN") &&
+    !pos.some((tag) => tag === "VERB" || tag === "AUX" || tag === "PRON");
+}
+
+function potentialField(text: string) {
+  const split = text.match(assignment);
+  return !!split && fieldPhrase(text.slice(0, split.index).trim());
+}
+
 function clauses(input: string) {
   const out: string[] = [];
   const separators = /"[^"]*"|“[^”]*”|(?:[,;\n]|[.!?](?=\s))\s*(?:(?:and|then)\s+)?|\s+(?:and then|and also|and|then)\s+/gi;
@@ -115,9 +129,10 @@ function clauses(input: string) {
   for (const match of input.matchAll(separators)) {
     if (/^["“]/.test(match[0])) continue;
     const next = input.slice(match.index! + match[0].length).trim();
-    const joined = /^\s+(?:and|then)/i.test(match[0]);
-    const target = descriptor(next.split(assignment)[0]);
-    if ((!action(next) && !(assignment.test(next) && fieldCategory(target)) &&
+    const joined = /\b(?:and|then)\b/i.test(match[0]);
+    const hardBreak = /^[;\n]/.test(match[0]);
+    const suggestsCommand = joined && tokens(next.replace(helpers, "")).out(nlp.its.pos)[0] === "VERB";
+    if ((!hardBreak && !action(next) && !potentialField(next) && !suggestsCommand &&
       !(joined && /^(?:increase|reduce)\s+its\s+(?:font\s+)?size/i.test(next))) || !input.slice(start, match.index).trim()) continue;
     out.push(input.slice(start, match.index).trim());
     start = match.index! + match[0].length;
@@ -126,39 +141,61 @@ function clauses(input: string) {
   return out.filter(Boolean);
 }
 
+function outsideLiterals(text: string, pattern: RegExp) {
+  const masked = text.replace(/"[^"]*"|“[^”]*”/g, (value) => "\ue000".repeat(value.length));
+  const match = masked.match(pattern);
+  const without = match?.index !== undefined ? text.slice(0, match.index) + text.slice(match.index + match[0].length) : text;
+  return { match, without: without.trim() };
+}
+
 function extractPage(text: string, count: number) {
-  const found = text.match(pageHint);
+  const { match: found, without } = outsideLiterals(text, pageHint);
   if (!found) return { text, page: undefined };
   const word = (found[1] ?? found[2]).toLowerCase();
   const page = word === "last" ? count : /^\d/.test(word) ? Number(word) : Math.max(named.indexOf(word), cardinal.indexOf(word)) + 1;
   if (page < 1 || page > count) throw new Error(`Choose a page from 1 to ${count}.`);
-  return { text: text.replace(found[0], "").trim(), page: page - 1 };
+  return { text: without, page: page - 1 };
 }
 
 function cleanValue(value: string, today: string) {
-  const trimmed = value.trim().replace(/^["“]([\s\S]+)["”]$/, "$1").trim();
-  return /^(?:today(?:['’]s date)?|the current date)$/i.test(trimmed) ? today : trimmed;
+  const typed = value.trim();
+  const literal = typed.match(/^["“]([\s\S]+)["”]$/);
+  const trimmed = (literal?.[1] ?? typed).trim();
+  if (!literal && (clauses(trimmed).length > 1 || (action(trimmed) && /\b(?:the|this|it|page)\b/i.test(trimmed)))) {
+    throw new Error("Part of the replacement looks like a separate instruction. Separate the changes or quote the literal text you want written.");
+  }
+  return !literal && /^(?:today(?:['’]s date)?|the current date)$/i.test(trimmed) ? today : trimmed;
 }
 
 export function understand(input: string, active: number, count: number, today: string): Meaning[] {
   const pieces = clauses(input);
   if (!pieces.length || pieces.length > 8) throw new Error("Describe between one and eight changes at a time.");
-  return pieces.map((piece): Meaning => {
+  return pieces.map((piece, step): Meaning => {
     const sentence = piece.replace(/[.!?]$/, "").trim().replace(helpers, "");
     if (/\b(?:do not|don['’]t|never|without|except|unless|if possible|if it)\b/i.test(sentence.split(assignment)[0]) ||
       /\b(?:secure(?:ly)?|redact|permanently|erase)\b/i.test(sentence.split(assignment)[0])) {
       throw new Error("This request contains a condition or asks to erase content. Give a direct edit. Visual text replacement leaves the original recoverable.");
     }
-    const { text, page } = extractPage(sentence, count);
+    const { text: pageText, page } = extractPage(sentence, count);
+    const all = /\s+(?:everywhere(?: it appears)?|on all pages|in every occurrence)(?=\s|$)/i;
+    const relative = /\s+(?:below|under|beneath)\s+(?:it|that|the previous (?:field|edit)|the name)(?=\s|$)/i;
+    const allPages = outsideLiterals(pageText, all);
+    const below = outsideLiterals(allPages.without, relative);
+    const text = below.without;
     const parsed = action(text);
     const verb = parsed?.verb;
     let rest = parsed?.rest ?? text;
-    if (/^(?:increase|raise|enlarge)\s+(?:its|the)\s+(?:font\s+)?size$/i.test(text)) return { kind: "style", label: "it", style: { size: 0 }, page };
+    if (/^(?:use|keep|restore)\s+(?:the\s+)?(?:same\s+font\s+as\s+the\s+original|original\s+(?:font|formatting|style))$/i.test(text)) {
+      return { kind: "style", label: "it", style: {}, original: /font/i.test(text) ? "font" : "formatting", page };
+    }
+    const resize = text.match(/^(increase|raise|enlarge|decrease|reduce|lower|shrink)\s+(?:(?:its|the)\s+)?(?:font\s+)?size(?:\s+(?:slightly|a little))?$/i);
+    if (resize) return { kind: "style", label: "it", style: { size: /reduce|decrease|lower|shrink/i.test(resize[1]) ? -1 : 0 }, page };
     if (verb === "move" || verb === "shift") {
       const photo = rest.match(/^(?:(?:the|my|our|this)\s+)?(?:uploaded\s+)?(?:photo(?:graph)?|picture|image)\b.*\b(top|bottom)[\s-]+(left|right|center|centre)\b/i);
       if (photo) return { kind: "move_photo", position: `${photo[1].toLowerCase()} ${photo[2].toLowerCase()}` };
-      const direction = rest.match(/^(?:it|that|the (?:main )?(?:heading|title))\s+(?:slightly\s+|a little\s+)?(up|down|left|right)$/i);
-      if (direction) return { kind: "move_text", direction: direction[1].toLowerCase() as "up" | "down" | "left" | "right" };
+      const direction = rest.match(/^(it|that|both(?: of them)?|(?:the |my )?(?:uploaded )?(?:photo(?:graph)?|picture|image)|the (?:main )?(?:heading|title))\s+(?:slightly\s+|a little\s+)?(?:to the\s+)?(up|down|left|right)$/i);
+      if (direction) return { kind: "move_text", direction: direction[2].toLowerCase() as "up" | "down" | "left" | "right",
+        both: /^both/i.test(direction[1]), photo: /photo|picture|image/i.test(direction[1]) };
     }
     if (verb === "replace") {
       const exact = rest.match(/^["“]([^"”]+)["”]\s+with\s+(.+)$/i);
@@ -182,18 +219,25 @@ export function understand(input: string, active: number, count: number, today: 
     const should = rest.match(/^(.+?)\s+(?:should (?:say|read|be)|needs? to (?:say|read|be)|should be changed to)\s+(.+)$/i);
     if (should) return { kind: "value", label: descriptor(should[1]), value: cleanValue(should[2], today), page };
     const split = rest.match(assignment);
-    if (split && (setter.test(verb ?? "") || (!verb && fieldCategory(descriptor(rest.slice(0, split.index)))))) {
+    if (split && (setter.test(verb ?? "") || (!verb && (step > 0 && potentialField(rest) || fieldCategory(descriptor(rest.slice(0, split.index))))))) {
       const label = descriptor(rest.slice(0, split.index));
       const value = cleanValue(rest.slice(split.index! + split[0].length), today).replace(/^this new\s+(?:address|value)\s*[:,]?\s*/i, "");
       if (!label || !value || /^(?:this|that|it|the new value|this new address)$/i.test(value)) throw new Error(`What new value should I use for ${label || "this field"}?`);
       // Existing color and exact point-size controls have their own grammar.
-      if (!/^(?:(?:text )?colou?r|(?:font )?size) of\b/i.test(label)) return { kind: "value", label, value, page };
+      if (!/^(?:(?:text )?colou?r|(?:font )?size) of\b/i.test(label)) return { kind: "value", label, value, page, all: !!allPages.match, relative: below.match ? "below" : undefined };
     }
-    if (setter.test(verb ?? "") && fieldCategory(descriptor(rest))) {
-      throw new Error(`What new value should I use for ${descriptor(rest)}?`);
+    if (setter.test(verb ?? "") && fieldPhrase(rest) && !split) {
+      return { kind: "value", label: descriptor(rest), page, all: !!allPages.match, relative: below.match ? "below" : undefined };
     }
     const command = sentence.replace(/^(?:number (?:all |the )?pages)$/i, "add page numbers")
+      .replace(/(?:add|insert|place|put) (?:the )?photograph i uploaded (?:to|in|into) (?:the )?box at the top/i, "insert the photo into the photo box")
+      .replace(/\b(?:in|into) (?:the )?passport area\b/i, "into the photo box")
       .replace(/^turn\s+/i, "rotate ").replace(/\bpicture\b/gi, "photo");
-    return { kind: "command", command: parseInstruction(command, page ?? active, count, today) };
+    const parsedCommand = parseInstruction(command, page ?? active, count, today);
+    if (parsedCommand.kind === "heading") {
+      if (parsedCommand.style.replacement !== undefined) return { kind: "value", label: "heading", page, exact: parsedCommand.exact, value: parsedCommand.style.replacement };
+      return { kind: "style", label: "heading", page, style: parsedCommand.style };
+    }
+    return { kind: "command", command: parsedCommand.kind === "photo" ? { ...parsedCommand, top: /box at the top/i.test(sentence) } : parsedCommand };
   });
 }

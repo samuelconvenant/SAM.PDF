@@ -107,7 +107,7 @@ export async function raster(page: PDFPageProxy, signal: AbortSignal, longest = 
   }
 }
 
-function findSlot({ data, width, height }: ImageData) {
+function findSlots({ data, width, height }: ImageData) {
   const edges: { x: number; end: number; y: number }[] = [];
   const ink = (x: number, y: number) => Math.min(data[(y * width + x) * 4], data[(y * width + x) * 4 + 1], data[(y * width + x) * 4 + 2]) < 165;
   for (let y = 1; y < height - 1; y++) {
@@ -116,7 +116,7 @@ function findSlot({ data, width, height }: ImageData) {
       const left = x;
       while (x < width - 1 && ink(x, y)) x++;
       if (x - left >= 32 && x - left < width * .55) edges.push({ x: left, end: x - 1, y });
-      if (edges.length > 320) return null;
+      if (edges.length > 320) return [];
     }
   }
   const boxes: SmartRect[] = [];
@@ -143,10 +143,15 @@ function findSlot({ data, width, height }: ImageData) {
       if (boxes.some((other) => Math.abs(box.x - other.x) <= 4 / width && Math.abs(box.y - other.y) <= 4 / height &&
         Math.abs(box.width - other.width) <= 6 / width && Math.abs(box.height - other.height) <= 6 / height)) continue;
       boxes.push(box);
-      if (boxes.length > 1) return null;
+      if (boxes.length > 8) return [];
     }
   }
-  return boxes[0];
+  return boxes;
+}
+
+export async function photoFrames(pdf: PDFDocumentProxy, page: number, nearTop: boolean, signal: AbortSignal) {
+  const boxes = findSlots(await raster(await pdf.getPage(page + 1), signal));
+  return nearTop ? boxes.filter((box) => box.y + box.height / 2 < .43) : boxes;
 }
 
 export async function planInstruction(pdf: PDFDocumentProxy, command: Instruction, hasPhoto: boolean, signal: AbortSignal): Promise<Proposal> {
@@ -181,9 +186,9 @@ export async function planInstruction(pdf: PDFDocumentProxy, command: Instructio
     case "heading": {
       const line = await locateText(await pdf.getPage(command.page + 1), signal, command.exact);
       const size = command.style.size === 0 ? line.size * 1.2 : command.style.size ?? line.size;
-      return plan({ kind: "cover_text", page: command.page, text: command.style.replacement ?? line.text,
-        cover: line.rect, baseline: line.baseline, size, bold: command.style.bold ?? line.bold, color: command.style.color ?? "#000000" },
-      `A white cover will obscure “${line.text}”. The original text remains searchable and recoverable. Review the placement before applying.`);
+      return plan({ kind: "replace_text", page: command.page, text: command.style.replacement ?? line.text, before: line.text,
+        cover: line.rect, baseline: line.baseline, originalBaseline: line.baseline, originalSize: line.size, size,
+        bold: command.style.bold, color: command.style.color, alignment: "left" });
     }
     case "photo": {
       if (!hasPhoto) throw new Error("Upload a JPEG or PNG photo first.");
@@ -198,7 +203,10 @@ export async function planInstruction(pdf: PDFDocumentProxy, command: Instructio
           x: align === "left" ? .06 : align === "right" ? .94 - width : (1 - width) / 2,
           y: edge === "top" ? .06 : edge === "bottom" ? .94 - height : (1 - height) / 2, width, height,
         };
-      } else box = findSlot(await raster(page, signal));
+      } else {
+        const frames = await photoFrames(pdf, command.page, command.top ?? false, signal);
+        if (frames.length === 1) box = frames[0];
+      }
       if (!box) throw new Error('I could not identify a single empty photo box. Specify a position such as “Insert the photo at the top right on page one” and adjust its coordinates in the review.');
       return plan({ kind: "insert_image", page: command.page, box },
         command.position ? "Review the position and adjust the crop frame before applying." : "An empty frame was detected. Confirm that it is the intended photo placeholder.");

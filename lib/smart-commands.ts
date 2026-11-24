@@ -18,7 +18,7 @@ export type Instruction =
   | { kind: "number"; position: Position }
   | { kind: "add"; page: number; text: string; position: Position; belowHeading?: boolean }
   | { kind: "heading"; page: number; style: Style; exact?: string }
-  | { kind: "photo"; page: number; position?: Position };
+  | { kind: "photo"; page: number; position?: Position; top?: boolean };
 
 export const smartExamples = [
   "Change the full name to Jordan Lee and the reference number to REF-206",

@@ -116,7 +116,7 @@ try {
   await button(desktop, "Revise").click();
   assert.equal(await desktop.getByLabel("Describe the change").inputValue(), 'Add "Case ID 48" below the heading on page one');
   await propose(desktop, "Change the document heading to Application Letter");
-  await desktop.getByText(/original text remains searchable/).waitFor();
+  await desktop.getByText(/Helvetica · 27 pt/).waitFor();
   assert.equal(await button(desktop, "Preview & download").count(), 0);
   await button(desktop, "Original").click();
   assert.equal(await button(desktop, "Apply changes").isEnabled(), false);
@@ -201,7 +201,7 @@ assert len(edit) == 2 and edit[0].rotation == 0
 assert 'Second sheet' in edit[0].get_text() and 'Project Approved' in edit[0].get_text()
 assert edit[0].get_text().splitlines()[-1] == '1'
 assert edit[1].get_text().splitlines()[-1] == '2'
-assert 'Application Letter' in edit[1].get_text() and 'Original Application' in edit[1].get_text()
+assert 'Application Letter' in edit[1].get_text() and 'Original Application' not in edit[1].get_text()
 assert re.search(r'[A-Z][a-z]+ \\d{1,2}, 20\\d{2}', edit[1].get_text())
 assert len(edit[1].get_images()) == 1
 ref = edit[1].get_images()[0][0]

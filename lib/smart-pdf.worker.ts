@@ -2,38 +2,10 @@ import { clip, degrees, endPath, PDFDocument, PDFName, popGraphicsState, pushGra
 import type { PDFFont, PDFPage } from "pdf-lib";
 import { smartPageLimit, smartPdfLimit } from "./smart-commands";
 import { smartOperations } from "./smart-plan";
-import type { SmartJob, SmartOperation, SmartRect } from "./smart-plan";
+import type { SmartJob, SmartOperation, SmartRect, SmartResult } from "./smart-plan";
+import { coordinates } from "./smart-page-geometry";
 
 class SmartEditError extends Error {}
-
-function coordinates(page: PDFPage) {
-  const media = page.getMediaBox();
-  const crop = page.getCropBox();
-  let left = Math.max(media.x, crop.x);
-  let bottom = Math.max(media.y, crop.y);
-  let right = Math.min(media.x + media.width, crop.x + crop.width);
-  let top = Math.min(media.y + media.height, crop.y + crop.height);
-  if (right <= left || top <= bottom) {
-    ({ x: left, y: bottom } = media);
-    right = left + media.width;
-    top = bottom + media.height;
-  }
-  const angle = ((page.getRotation().angle % 360) + 360) % 360;
-  const swap = angle === 90 || angle === 270;
-  const width = swap ? top - bottom : right - left;
-  const height = swap ? right - left : top - bottom;
-  if (![0, 90, 180, 270].includes(angle) || width <= 0 || height <= 0) throw new SmartEditError("The page dimensions or rotation are unsupported.");
-
-  function point(x: number, y: number) {
-    switch (angle) {
-      case 90: return { x: left + y, y: bottom + x };
-      case 180: return { x: right - x, y: bottom + y };
-      case 270: return { x: right - y, y: top - x };
-      default: return { x: left + x, y: top - y };
-    }
-  }
-  return { width, height, point, rotate: degrees(angle) };
-}
 
 function textWidth(font: PDFFont, text: string, size: number) {
   try { return font.widthOfTextAtSize(text, size); }
@@ -68,15 +40,16 @@ async function drawPhoto(pdf: PDFDocument, page: PDFPage, image: string | undefi
   page.pushOperators(popGraphicsState());
 }
 
-async function prepare({ source, operations: input, image }: SmartJob) {
+async function prepare({ source, operations: input, image }: SmartJob): Promise<SmartResult> {
   if (!(source instanceof File) || !source.size || source.size > smartPdfLimit) throw new SmartEditError("Choose a non-empty PDF of 25 MiB or less.");
   const operation = smartOperations.safeParse(input);
   if (!operation.success) throw new SmartEditError("This instruction produced an invalid editing operation.");
   const edits = operation.data;
-  const pdf = await PDFDocument.load(await source.arrayBuffer(), { updateMetadata: false, throwOnInvalidObject: true }).catch(() => {
+  const original = await source.arrayBuffer();
+  let pdf = await PDFDocument.load(original, { updateMetadata: false, throwOnInvalidObject: true }).catch(() => {
     throw new SmartEditError("This PDF could not be edited. Open a readable, unlocked copy and try again.");
   });
-  const pages = pdf.getPages();
+  let pages = pdf.getPages();
   if (!pages.length || pages.length > smartPageLimit) throw new SmartEditError("Smart PDF Editor supports up to 150 pages.");
   if (edits.some((edit) => "page" in edit && edit.page >= pages.length)) throw new SmartEditError("Choose a page in this document.");
   const removed = new Set(edits.flatMap((edit) => edit.kind === "remove_page" ? [edit.page] : []));
@@ -87,6 +60,22 @@ async function prepare({ source, operations: input, image }: SmartJob) {
   const reorder = edits.filter((edit) => edit.kind === "reorder_pages");
   const numbering = edits.filter((edit) => edit.kind === "add_page_numbers");
   if (reorder.length > 1 || numbering.length > 1) throw new SmartEditError("Give one page order and one numbering instruction per review.");
+  const native = edits.flatMap((edit, step) => edit.kind === "replace_text" ? [{ edit, step, geometry: coordinates(pages[edit.page]) }] : []);
+  const asFile = (bytes: Uint8Array) => new File([new Uint8Array(bytes)], source.name, { type: "application/pdf" });
+  const outcomes: SmartResult["outcomes"] = [];
+  if (native.length) {
+    const { replaceRuns, NativeTextError } = await import("./smart-native-text");
+    try {
+      const result = await replaceRuns(original, native, smartPdfLimit);
+      outcomes.push(...result.outcomes);
+      if (native.length === edits.length) return { file: asFile(result.bytes), outcomes };
+      pdf = await PDFDocument.load(result.bytes, { updateMetadata: false, throwOnInvalidObject: true });
+      pages = pdf.getPages();
+    } catch (error) {
+      if (error instanceof NativeTextError) throw new SmartEditError(error.message);
+      throw error;
+    }
+  }
 
   async function applyContent(edit: SmartOperation) {
     switch (edit.kind) {
@@ -140,6 +129,7 @@ async function prepare({ source, operations: input, image }: SmartJob) {
     case "remove_page":
     case "reorder_pages":
     case "add_page_numbers":
+    case "replace_text":
       break;
     }
   }
@@ -163,7 +153,7 @@ async function prepare({ source, operations: input, image }: SmartJob) {
   }
   const bytes = await pdf.save({ updateFieldAppearances: false });
   if (bytes.byteLength > smartPdfLimit) throw new SmartEditError("The result exceeds the 25 MiB Smart Editor limit.");
-  return new File([new Uint8Array(bytes)], source.name, { type: "application/pdf" });
+  return { file: asFile(bytes), outcomes };
 }
 
 self.onmessage = ({ data }: MessageEvent<SmartJob>) => {

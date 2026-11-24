@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { ChevronLeft, ChevronRight, FileText, ImagePlus, Minus, Plus, Sparkles, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
@@ -9,13 +10,13 @@ import { runDocumentJob } from "../lib/document-job";
 import { readDocumentImage } from "../lib/document-image";
 import { smartExamples, smartPageLimit, smartPdfLimit, smartPromptLimit } from "../lib/smart-commands";
 import type { AssistantResult, Change, Clarification, Decisions, Revision } from "../lib/smart-assistant";
-import type { SmartJob } from "../lib/smart-plan";
+import type { SmartJob, SmartOutcome, SmartResult } from "../lib/smart-plan";
 import type { PreviewOutput } from "./document-preview";
 import { PagePreviews, PdfCanvas, usePdf } from "./page-preview";
 
 const DocumentPreview = dynamic(() => import("./document-preview"), { ssr: false });
 const pdfType = "application/pdf";
-type Review = { file: File; revision: Revision };
+type Review = SmartResult & { revision: Revision };
 type Pending = { question: Clarification; pdf: PDFDocumentProxy; page: number; decisions: Decisions };
 type Photo = { name: string; data: string };
 
@@ -53,7 +54,7 @@ export function SmartWorkspace() {
 }
 
 function SmartSession({ source, onReplace }: { source: File; onReplace: () => void }) {
-  const [history, setHistory] = useState<{ stack: Review[]; floor?: Review }>({ stack: [] });
+  const [history, setHistory] = useState<{ stack: Review[]; redo: Review[]; floor?: Review }>({ stack: [], redo: [] });
   const [followFrom, setFollowFrom] = useState<Review>();
   const [review, setReview] = useState<Review | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
@@ -78,7 +79,7 @@ function SmartSession({ source, onReplace }: { source: File; onReplace: () => vo
   const previewFile = review && showProposal ? review.file : current;
   const ready = renderedFile === previewFile && !locked;
   const onLocked = useCallback(() => setLocked(true), []);
-  const photoIndex = review?.revision.changes.findIndex(({ operation }) => operation.kind === "insert_image") ?? -1;
+  const photoIndex = review?.revision.reviewSteps.find((index) => review.revision.changes[index].operation.kind === "insert_image") ?? -1;
   const photoOperation = review?.revision.changes[photoIndex]?.operation;
 
   useEffect(() => () => job.current?.abort(), []);
@@ -105,13 +106,13 @@ function SmartSession({ source, onReplace }: { source: File; onReplace: () => vo
       const { revision } = result;
       setBusy("Preparing preview…");
       const operations = revision.changes.map(({ operation }) => operation);
-      const file = await runDocumentJob<SmartJob, File>(() => new Worker(new URL("../lib/smart-pdf.worker.ts", import.meta.url), { type: "module" }),
-        { source: revision.base, operations, image: revision.image }, controller.signal, 35_000);
+      const prepared = await runDocumentJob<SmartJob, SmartResult>(() => new Worker(new URL("../lib/smart-pdf.worker.ts", import.meta.url), { type: "module" }),
+        { source: revision.base, operations, image: revision.image }, controller.signal, 45_000);
       controller.signal.throwIfAborted();
-      setReview({ file, revision });
+      setReview({ ...prepared, revision });
       setShowProposal(true);
       setPhotoDirty(false);
-      const first = operations[0];
+      const first = operations[revision.reviewSteps[0]] ?? operations[0];
       const target = "page" in first ? first.page : 0;
       const reordered = operations.find((operation) => operation.kind === "reorder_pages");
       const removed = new Set(operations.flatMap((operation) => operation.kind === "remove_page" ? [operation.page] : []));
@@ -173,7 +174,7 @@ function SmartSession({ source, onReplace }: { source: File; onReplace: () => vo
 
   function apply() {
     if (!review || !showProposal || !ready || photoDirty || busy) return;
-    setHistory(({ stack, floor }) => ({ stack: [...stack, review].slice(-10), floor: stack.length === 10 ? stack[0] : floor }));
+    setHistory(({ stack, floor }) => ({ stack: [...stack, review].slice(-10), redo: [], floor: stack.length === 10 ? stack[0] : floor }));
     setReview(null);
     setOutput(null);
     setPrompt("");
@@ -182,9 +183,15 @@ function SmartSession({ source, onReplace }: { source: File; onReplace: () => vo
   }
 
   function undo() {
-    setHistory(({ stack, floor }) => ({ stack: stack.slice(0, -1), floor }));
+    setHistory(({ stack, redo, floor }) => ({ stack: stack.slice(0, -1), redo: [stack.at(-1)!, ...redo], floor }));
     setOutput(null);
     setFollowFrom(undefined);
+    setError("");
+  }
+
+  function redo() {
+    setHistory(({ stack, redo, floor }) => ({ stack: [...stack, redo[0]], redo: redo.slice(1), floor }));
+    setOutput(null);
     setError("");
   }
 
@@ -207,6 +214,15 @@ function SmartSession({ source, onReplace }: { source: File; onReplace: () => vo
         <section className="smart-instructions" aria-labelledby="smart-instructions">
           <h3 id="smart-instructions">Your instruction</h3>
           <p>{followFrom ? "Describe a follow-up to your proposed edit." : "Ask for one or more changes. Smart Editor looks for matching fields in your PDF."}</p>
+          {history.stack.length > 0 && <details className="smart-examples smart-session">
+            <summary>Editing conversation</summary>
+            <ol aria-label="Applied instructions">
+              {history.stack.map(({ revision }, index) => <li key={index}>
+                <p>{revision.prompt}</p>
+                <small>{revision.reviewSteps.map((step) => revision.changes[step].label).join(" · ")}</small>
+              </li>)}
+            </ol>
+          </details>}
           <InstructionForm prompt={prompt} setPrompt={setPrompt} promptInput={promptInput}
             disabled={!ready || !!review || !!pending || !!busy || photoBusy} index={index}
             onSubmit={analyze} />
@@ -249,8 +265,10 @@ function SmartSession({ source, onReplace }: { source: File; onReplace: () => vo
             </div>
           </section>}
           {review && <section className="smart-review" aria-labelledby="smart-proposal">
-            <h3 id="smart-proposal">{review.revision.changes.length === 1 ? "Proposed change" : "Proposed changes"}</h3>
-            <ul className="smart-changes">{review.revision.changes.map((change, step) => <ChangeDetails key={step} change={change} />)}</ul>
+            <h3 id="smart-proposal">{review.revision.reviewSteps.length === 1 ? "Proposed change" : "Proposed changes"}</h3>
+            <p className="smart-request">{review.revision.prompt}</p>
+            <ul className="smart-changes">{review.revision.reviewSteps.map((step) => <ChangeDetails key={step}
+              change={review.revision.changes[step]} outcome={review.outcomes.find((item) => item.step === step)} />)}</ul>
             {photoOperation?.kind === "insert_image" && <form key={JSON.stringify(photoOperation.box)} className="smart-photo-adjust" onSubmit={(event) => void adjustPhoto(event)} onChange={() => setPhotoDirty(true)}>
               <fieldset disabled={!!busy}><legend>Photo frame (% of page)</legend>
                 {Object.entries(photoOperation.box).map(([name, value]) => <label className="field" key={name}>{({ x: "Left", y: "Top", width: "Width", height: "Height" })[name]}
@@ -271,10 +289,11 @@ function SmartSession({ source, onReplace }: { source: File; onReplace: () => vo
             </div>
           </section>}
           {(busy || photoBusy) && <p role="status">{busy || "Preparing photo…"}</p>}
-          {error && <p className="workspace-error" role="alert">{error}</p>}
-          {latest && !review && !pending && !followFrom && <div className="smart-actions">
-            <p role="status">Changes applied.</p><button type="button" className="button primary" disabled={!!busy} onClick={download}><FileText size={16} aria-hidden="true" /> Preview &amp; download</button>
+          {error && <p className="workspace-error" role="alert">{error}{error.includes("manual Edit PDF") && <> <Link className="smart-manual-link" href="/tools/edit">Open manual Edit PDF</Link></>}</p>}
+          {(latest || history.redo.length > 0) && !review && !pending && !followFrom && <div className="smart-actions">
+            {latest && <><p role="status">Changes applied.</p><button type="button" className="button primary" disabled={!!busy} onClick={download}><FileText size={16} aria-hidden="true" /> Preview &amp; download</button></>}
             {history.stack.length > 0 && <button type="button" className="button secondary" disabled={!!busy} onClick={undo}>Undo last change</button>}
+            {history.redo.length > 0 && <button type="button" className="button secondary" disabled={!!busy} onClick={redo}>Redo change</button>}
           </div>}
         </section>
       </div>
@@ -283,7 +302,7 @@ function SmartSession({ source, onReplace }: { source: File; onReplace: () => vo
   </div>;
 }
 
-function ChangeDetails({ change }: { change: Change }) {
+function ChangeDetails({ change, outcome }: { change: Change; outcome?: SmartOutcome }) {
   const { operation, target, label, note } = change;
   const pages = target?.kind === "field" ? target.pages : "page" in operation ? [operation.page] : [];
   const formatting = operation.kind === "cover_text" && target?.kind === "text" ? [
@@ -294,10 +313,12 @@ function ChangeDetails({ change }: { change: Change }) {
   return <li>
     <strong>{label}</strong>
     {pages.length > 0 && target && <p>{pages.length > 1 ? "Pages" : "Page"} {pages.map((page) => page + 1).join(", ")}</p>}
-    {target && (operation.kind === "set_field" || operation.kind === "cover_text") && <dl>
-      <div><dt>Current</dt><dd>{target.value || "Empty"}</dd></div>
+    {target && (operation.kind === "set_field" || operation.kind === "cover_text" || operation.kind === "replace_text") && <dl>
+      <div><dt>Current</dt><dd>{change.previousValue || target.value || "Empty"}</dd></div>
       <div><dt>Proposed</dt><dd>{operation.text}{formatting && ` · ${formatting}`}</dd></div>
     </dl>}
+    {outcome && <p>{outcome.formatting}</p>}
+    {outcome?.substitution && <p>{outcome.substitution}</p>}
     {note && <p>{note}</p>}
   </li>;
 }
