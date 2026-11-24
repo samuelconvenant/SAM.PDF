@@ -3,7 +3,7 @@
 import { FileText } from "lucide-react";
 import { createContext, memo, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 
 type LoadedDocument = { pdf: PDFDocumentProxy; file: Blob };
 const PreviewContext = createContext<LoadedDocument | null>(null);
@@ -16,7 +16,7 @@ export function PagePreviews({ file, children, full = false, defer = false, pass
   const [document, setDocument] = useState<LoadedDocument | null>(null);
   const [failedFile, setFailedFile] = useState<Blob | null>(null);
   const [visible, setVisible] = useState(!defer);
-  const loaded = useRef<PDFDocumentProxy | null>(null);
+  const loaded = useRef<PDFDocumentLoadingTask | null>(null);
   const observed = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,7 +43,7 @@ export function PagePreviews({ file, children, full = false, defer = false, pass
       return loading.promise.then((doc) => {
         if (canceled) return;
         const previous = loaded.current;
-        loaded.current = doc;
+        loaded.current = loading;
         dispose = undefined;
         setFailedFile(null);
         setDocument({ pdf: doc, file });

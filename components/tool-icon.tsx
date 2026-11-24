@@ -5,6 +5,7 @@ const icons = {
   split: "M7 3h10v7H7zM12 10v4M5 21v-4l7-3 7 3v4M3 21h4m10 0h4",
   organize: "m3 8 9-4 9 4-9 4-9-4Zm0 5 9 4 9-4M3 18l9 4 9-4",
   edit: "M13 3H5v18h14v-8M9 15l2-4 7-7 3 3-7 7-5 1Z",
+  "smart-pdf-editor": "M11 3H5v18h14v-7M15 10l1.4-3.6L20 5l-3.6-1.4L15 0l-1.4 3.6L10 5l3.6 1.4L15 10ZM8 13h8m-8 4h5",
   create: "M14 3H5v18h14V8l-5-5Zm0 0v5h5M12 11v6m-3-3h6",
   "images-to-pdf": "M3 5h14v11H3zM6 13l3-3 3 3 2-2 3 3m3-6v12H7M7 8h.1",
   "pdf-to-word": "M4 4h11l4 4v12H4zM15 4v4h4M7 12l2 5 2-4 2 4 2-5",

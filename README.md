@@ -14,6 +14,8 @@ npm.cmd run dev -- --hostname 127.0.0.1
 
 Open http://127.0.0.1:3000. Use Python 3.11–3.13 and install LibreOffice Writer from your OS package manager or the official installer. On macOS and Linux, use `.venv/bin/python` and `npm`. If either executable is installed elsewhere, set `SAMPDF_PYTHON` or `SAMPDF_SOFFICE` to its full path before starting Next.js. You can set those paths in the project’s ignored `.env.local` file.
 
+The browser tools, including Smart PDF Editor and Protect PDF, need only `npm.cmd ci` and `npm.cmd run dev`. Python and LibreOffice are for local Word conversion.
+
 ## Available tools
 
 | Tool | Output |
@@ -24,6 +26,7 @@ Open http://127.0.0.1:3000. Use Python 3.11–3.13 and install LibreOffice Write
 | Images to PDF | Ordered JPEG and PNG conversion to image-sized or A4 pages |
 | Create PDF | A new A4 PDF from a blank rich-text draft, with tables, images, and automatic pagination |
 | Edit PDF | An existing PDF with precisely positioned text boxes and JPEG or PNG photos |
+| Smart PDF Editor | A revised PDF from an English instruction, with a preview and approval step |
 | PDF to Word | Editable DOCX from text-based PDFs, with a LibreOffice-rendered preview |
 | Word to PDF | PDF produced by LibreOffice Writer and displayed in the shared viewer |
 | Protect PDF | AES-256 encrypted PDF requiring a password to open |
@@ -44,9 +47,19 @@ Edit PDF starts with an existing file. Drag a selected text box directly by its 
 
 The six PDF editing and assembly tools process files in browser memory. PDF file workspaces accept up to 30 files and 80 MiB total. Images inserted into a draft or existing page have a 12 MiB per-image limit and are normalized to a maximum of 2,400 pixels on the longest side. Drafts are held in memory until you leave the tool.
 
-Protect PDF and Protect with Password use PyMuPDF on the local Next.js backend. The endpoint accepts up to 80 MiB and uses AES-256 with a required open password. Passwords and document data travel in the request body and through the Python process’s standard input. The engine performs protection in memory. For split archives it encrypts each enclosed PDF with the same password. The ZIP container opens normally. An encrypted source requires its existing password, or its owner password when modification is restricted. Protection rewrites the file and can affect existing digital signatures.
+Smart PDF Editor handles one English command at a time on an unlocked PDF of up to 25 MiB and 150 pages. It supports text and dates in named positions, text below a detected heading, page removal and rotation, page numbering, full page reordering, and photo insertion with a crop frame you can adjust. Compare Original and Proposed before applying. A unique, empty rectangular photo frame can be detected on the requested page. If the result is ambiguous, specify a position such as the top right. JPEG and PNG photos have a 12 MiB input limit. The parser uses rules and PDF.js layout inspection. All editing runs in the browser, with no model download or API key.
 
-Word conversions send one file of up to 25 MiB to the local Next.js server on your computer. The converter runs one job at a time and removes its temporary input, output, and LibreOffice profile when the job finishes or fails. Bind the development or production server to loopback for password protection and Word conversions. LibreOffice is needed for Word conversions. PDF encryption uses the same Python environment without LibreOffice.
+Heading changes and exact one-line replacements use a white visual cover and a new text layer. The underlying text remains searchable and extractable. This supports simple light-background layouts and Helvetica’s Latin character set. Use manual Edit PDF for other fonts and exact object placement. Text recognition requires a selectable text layer. Image-only scans need OCR before heading and exact-text commands can work. Smart PDF Editor can still rotate, reorder, or add new content to scanned pages. Arbitrary edits to original graphics, secure redaction, and editing existing embedded text are outside its scope.
+
+Protect PDF and Protect with Password use qpdf 12.4.2 compiled to WebAssembly in a dedicated browser worker. The worker accepts up to 80 MiB and applies AES-256 with a required open password and a cryptographically random owner password. Documents and passwords stay in worker memory until the job ends, is cancelled, or reaches its 60-second limit. For split archives, up to 150 PDFs can be encrypted individually with the same password. The ZIP container opens normally. An encrypted source requires its existing password, or its owner password when modification or other permissions are restricted. Protection rewrites the file and can affect existing digital signatures.
+
+Word conversions send one file of up to 25 MiB to the local Next.js server on your computer. The converter runs one job at a time and removes its temporary input, output, and LibreOffice profile when the job finishes or fails. Bind the server to loopback for these conversions. The public deployment does not supply a Word conversion service. When a Word conversion is run locally, its PDF output can use the same browser protection dialog as other PDFs.
+
+## Public hosting
+
+The existing Next.js build serves the same-origin JavaScript workers and the qpdf WASM asset over HTTPS. Smart editing and protection require no Vercel function, Python executable, external AI provider, environment secret, or backend upload. Vercel’s function body limit therefore does not affect these tools. PDF preview disables XFA and does not execute PDF JavaScript actions. Browser resource limits still apply to unusually complex documents.
+
+WebLLM was evaluated as a WebGPU-based upgrade, and Transformers.js with ONNX Runtime Web as a WebGPU or WASM alternative. Browser model inference brings a model download plus memory and startup costs that vary across desktop, Android, and iPhone. A shared open-source inference server would need dedicated model RAM, compute, capacity planning and abuse controls. On-device rules and PDF layout inspection provide the same tested command set across browsers without either dependency. The command engine validates operations before any generated document can be reviewed. [WebLLM](https://github.com/mlc-ai/web-llm) · [Transformers.js](https://huggingface.co/docs/transformers.js/index) · [Vercel Functions limits](https://vercel.com/docs/functions/limitations) · [qpdf WASM](https://github.com/soulehshaikh99/qpdf-wasm)
 
 PDF to Word reconstructs layout from page geometry and may change text order, styles, or pagination. Image-only PDFs must be processed with OCR first. In mixed files, scanned pages are not converted into editable text. Word to PDF fidelity depends on installed fonts and LibreOffice support for Word features. Active content, linked document resources, and some embedded formats are rejected. The DOCX preview shows LibreOffice’s rendering of the exact generated DOCX. Microsoft Word may paginate it differently.
 
@@ -60,6 +73,7 @@ node tests/preview-stability.mjs
 node tests/create-formatting.mjs
 node tests/pdf-workspaces.mjs
 node tests/writing-and-fonts.mjs
+node tests/smart-and-protection.mjs
 ```
 
 The browser suite uses installed Edge on Windows by default. Set `SAMPDF_BROWSER` to a Chromium executable, or use the Playwright-managed Chromium on other platforms. The main suite starts the production build on port 4417. The focused suites use a running samPDF server on port 3000. Set `SAMPDF_TEST_ORIGIN` to use a different server. Both conversion tests require the Python and LibreOffice setup above. The Create PDF and encryption output checks use PyMuPDF from the same Python environment. Screenshots and sample output are written to `test-results/`.

@@ -1,0 +1,54 @@
+.smart-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.smart-view, .smart-instructions {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #191816;
+}
+.smart-view { overflow: hidden; }
+.smart-view .pdf-stage { height: clamp(265px, 53dvh, 640px); }
+.smart-instructions, .smart-prompt, .smart-review { display: grid; gap: 10px; }
+.smart-instructions { padding: clamp(13px, 2vw, 22px); }
+.smart-instructions h3 { font-size: 1.12rem; }
+.smart-instructions p { color: var(--muted); font-size: .87rem; line-height: 1.55; overflow-wrap: anywhere; }
+.smart-instructions .workspace-error { color: var(--ink); }
+.smart-prompt textarea {
+  width: 100%;
+  background: #101010;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  resize: vertical;
+  min-height: 72px;
+}
+.smart-prompt .button { justify-self: start; }
+.smart-compare, .smart-actions, .smart-photo { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.smart-compare { justify-content: center; padding: 7px; border-bottom: 1px solid var(--line); }
+.smart-compare [aria-pressed="true"] { border-color: var(--gold, #d4af37); color: #e8d5a3; }
+.smart-actions .button { min-height: 44px; }
+.smart-photo span { font-size: .83rem; overflow-wrap: anywhere; }
+.smart-examples summary { cursor: pointer; min-height: 36px; align-content: center; color: #e8d5a3; }
+.smart-examples ul { margin: 0; padding-inline-start: 18px; }
+.smart-examples button { padding: 5px; font-size: .8rem; text-align: start; text-decoration: underline; text-underline-offset: 3px; }
+.smart-review { border-top: 1px solid var(--line); padding-top: 14px; }
+.smart-photo-adjust fieldset {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 9px;
+  margin: 0 0 9px;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.smart-photo-adjust legend { color: var(--muted); font-size: .83rem; margin-bottom: 6px; }
+.smart-photo-adjust input { width: 100%; min-width: 0; }
+@media (max-width: 740px) {
+  .smart-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .smart-view .pdf-stage { height: clamp(215px, 44dvh, 420px); }
+}

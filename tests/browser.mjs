@@ -123,7 +123,7 @@ try {
   await page.getByRole("searchbox").fill("no matches");
   await page.getByText("No tools match your search.").waitFor();
   await page.getByRole("button", { name: "Show all tools" }).click();
-  assert.equal(await page.locator(".tool-card").count(), 9);
+  assert.equal(await page.locator(".tool-card").count(), 10);
 
   const showcase = page.getByRole("region", { name: "Interactive PDF tools" });
   const stage = showcase.locator(".document-stage");
@@ -591,7 +591,7 @@ try {
       assert.equal(await menu.getAttribute("aria-expanded"), "false");
       assert.equal(await menu.evaluate((element) => element === document.activeElement), true);
     }
-    for (const path of ["/tools/merge", "/tools/split", "/tools/organize", "/tools/images-to-pdf", "/tools/create", "/tools/edit", "/tools/pdf-to-word", "/tools/word-to-pdf", "/tools/protect", "/help"]) {
+    for (const path of ["/tools/merge", "/tools/split", "/tools/organize", "/tools/images-to-pdf", "/tools/create", "/tools/edit", "/tools/smart-pdf-editor", "/tools/pdf-to-word", "/tools/word-to-pdf", "/tools/protect", "/help"]) {
       await visit(phone, path);
       if (width === 390) await phone.screenshot({ path: resolve(artifacts, `${path.split("/").at(-1)}-mobile.png`), fullPage: true });
     }

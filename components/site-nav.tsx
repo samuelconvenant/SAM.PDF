@@ -11,6 +11,7 @@ const links = [
   { href: "/tools/split", label: "Split" },
   { href: "/tools/create", label: "Create PDF" },
   { href: "/tools/edit", label: "Edit PDF" },
+  { href: "/tools/smart-pdf-editor", label: "Smart Editor" },
   { href: "/tools/pdf-to-word", label: "PDF to Word" },
   { href: "/tools/word-to-pdf", label: "Word to PDF" },
   { href: "/help", label: "Help & privacy" },

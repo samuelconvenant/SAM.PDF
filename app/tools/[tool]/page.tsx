@@ -8,6 +8,8 @@ import { Workspace } from "../../../components/workspace";
 import { ConversionWorkspace } from "../../../components/conversion-workspace";
 import { CreateTool } from "../../../components/create-tool";
 import { ProtectWorkspace } from "../../../components/protect-workspace";
+import { SmartWorkspace } from "../../../components/smart-workspace";
+import "../../smart.css";
 
 type Props = { params: Promise<{ tool: string }> };
 export function generateStaticParams() { return tools.map(({ id }) => ({ tool: id })); }
@@ -27,7 +29,10 @@ export default async function ToolPage({ params }: Props) {
         <h1>{tool.name}</h1>
         <p>{tool.description}</p>
       </div>
-      {tool.id === "create" ? <CreateTool /> : tool.id === "protect" ? <ProtectWorkspace /> : !("accept" in tool) ? (
+      {tool.id === "create" ? <CreateTool /> : tool.id === "protect" || tool.id === "smart-pdf-editor" ? <>
+        {tool.id === "protect" ? <ProtectWorkspace /> : <SmartWorkspace />}
+        <p className="tool-privacy"><ShieldCheck size={17} aria-hidden="true" /> Your files are processed on this device.</p>
+      </> : !("accept" in tool) ? (
         <ConversionWorkspace key={tool.id} kind={tool.id} />
       ) : <>
         <Workspace key={tool.id} tool={tool} />

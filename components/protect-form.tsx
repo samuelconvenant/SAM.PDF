@@ -48,7 +48,7 @@ export function ProtectForm({ file, format, name, sourcePassword = "", onCancel 
       setPassword("");
       setConfirm("");
     } catch (caught) {
-      if (!job.signal.aborted) setError(caught instanceof Error ? caught.message : "The local engine could not protect this document.");
+      if (!job.signal.aborted) setError(caught instanceof Error ? caught.message : "This browser could not protect the document.");
     } finally {
       active.current = null;
       if (!job.signal.aborted) setBusy(false);
@@ -57,7 +57,7 @@ export function ProtectForm({ file, format, name, sourcePassword = "", onCancel 
 
   return <form className="protect-form" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
     {format === "zip" && <p>Each PDF in the ZIP will require the same password. The ZIP itself can still be opened without a password.</p>}
-    <p>{url ? "Password protection is ready. Opening the protected PDF requires the password you chose." : "The local engine applies AES-256 encryption. Choose a unique passphrase of at least 12 characters. PDF passwords can use up to 40 UTF-8 bytes."}</p>
+    <p>{url ? "Password protection is ready. Opening the protected PDF requires the password you chose." : "AES-256 encryption runs in this browser. Choose a unique passphrase of at least 12 characters and up to 40 UTF-8 bytes."}</p>
     {tooLarge && <p className="workspace-error" role="alert">Password protection supports files up to 80 MiB.</p>}
     {!url && <fieldset disabled={busy || tooLarge}>
       <PasswordField label="Password" value={password} setValue={setPassword} />

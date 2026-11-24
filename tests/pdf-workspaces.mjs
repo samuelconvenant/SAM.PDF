@@ -329,7 +329,7 @@ try {
     await context.close();
   }
   assert.deepEqual(errors, []);
-  console.log("Upload gallery, touch editing, exact PDF geometry, local AES-256 protection, protected ZIP contents, and accessibility passed.");
+  console.log("Upload gallery, touch editing, exact PDF geometry, browser AES-256 protection, protected ZIP contents, and accessibility passed.");
 } finally {
   await browser.close();
 }
