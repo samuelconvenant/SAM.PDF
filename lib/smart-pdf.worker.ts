@@ -1,8 +1,8 @@
-import { clip, degrees, endPath, PDFDocument, popGraphicsState, pushGraphicsState, rectangle, rgb, StandardFonts } from "pdf-lib";
+import { clip, degrees, endPath, PDFDocument, PDFName, popGraphicsState, pushGraphicsState, rectangle, rgb, StandardFonts } from "pdf-lib";
 import type { PDFFont, PDFPage } from "pdf-lib";
 import { smartPageLimit, smartPdfLimit } from "./smart-commands";
-import { smartOperation } from "./smart-plan";
-import type { SmartJob, SmartRect } from "./smart-plan";
+import { smartOperations } from "./smart-plan";
+import type { SmartJob, SmartOperation, SmartRect } from "./smart-plan";
 
 class SmartEditError extends Error {}
 
@@ -68,37 +68,31 @@ async function drawPhoto(pdf: PDFDocument, page: PDFPage, image: string | undefi
   page.pushOperators(popGraphicsState());
 }
 
-async function prepare({ source, operation: input, image }: SmartJob) {
+async function prepare({ source, operations: input, image }: SmartJob) {
   if (!(source instanceof File) || !source.size || source.size > smartPdfLimit) throw new SmartEditError("Choose a non-empty PDF of 25 MiB or less.");
-  const operation = smartOperation.safeParse(input);
+  const operation = smartOperations.safeParse(input);
   if (!operation.success) throw new SmartEditError("This instruction produced an invalid editing operation.");
-  const edit = operation.data;
+  const edits = operation.data;
   const pdf = await PDFDocument.load(await source.arrayBuffer(), { updateMetadata: false, throwOnInvalidObject: true }).catch(() => {
     throw new SmartEditError("This PDF could not be edited. Open a readable, unlocked copy and try again.");
   });
   const pages = pdf.getPages();
   if (!pages.length || pages.length > smartPageLimit) throw new SmartEditError("Smart PDF Editor supports up to 150 pages.");
-  if ("page" in edit && edit.page >= pages.length) throw new SmartEditError("Choose a page in this document.");
-  switch (edit.kind) {
-    case "remove_page":
-      if (pages.length < 2) throw new SmartEditError("A PDF needs at least one page.");
-      pdf.removePage(edit.page);
-      break;
+  if (edits.some((edit) => "page" in edit && edit.page >= pages.length)) throw new SmartEditError("Choose a page in this document.");
+  const removed = new Set(edits.flatMap((edit) => edit.kind === "remove_page" ? [edit.page] : []));
+  if (removed.size >= pages.length) throw new SmartEditError("A PDF needs at least one page.");
+  if (edits.some((edit) => "page" in edit && edit.kind !== "remove_page" && removed.has(edit.page))) {
+    throw new SmartEditError("This plan edits and deletes the same page. Revise the instruction and remove the conflict.");
+  }
+  const reorder = edits.filter((edit) => edit.kind === "reorder_pages");
+  const numbering = edits.filter((edit) => edit.kind === "add_page_numbers");
+  if (reorder.length > 1 || numbering.length > 1) throw new SmartEditError("Give one page order and one numbering instruction per review.");
+
+  async function applyContent(edit: SmartOperation) {
+    switch (edit.kind) {
     case "rotate_page": {
       const page = pages[edit.page];
       page.setRotation(degrees(((page.getRotation().angle + edit.angle) % 360 + 360) % 360));
-      break;
-    }
-    case "reorder_pages":
-      if (edit.order.length !== pages.length || new Set(edit.order).size !== pages.length || edit.order.some((index) => index >= pages.length)) {
-        throw new SmartEditError("List each page exactly once.");
-      }
-      for (let index = pages.length - 1; index >= 0; index--) pdf.removePage(index);
-      for (const index of edit.order) pdf.addPage(pages[index]);
-      break;
-    case "add_page_numbers": {
-      const font = await pdf.embedFont(StandardFonts.Helvetica);
-      pages.forEach((page, index) => addText(page, font, String(index + 1), edit.position));
       break;
     }
     case "add_text": {
@@ -107,12 +101,16 @@ async function prepare({ source, operation: input, image }: SmartJob) {
       break;
     }
     case "cover_text": {
-      const font = await pdf.embedFont(edit.bold ? StandardFonts.HelveticaBold : StandardFonts.Helvetica);
+      const font = await pdf.embedFont(edit.serif ?
+        (edit.bold ? StandardFonts.TimesRomanBold : StandardFonts.TimesRoman) :
+        (edit.bold ? StandardFonts.HelveticaBold : StandardFonts.Helvetica));
       const page = pages[edit.page];
       const { point, rotate, width, height } = coordinates(page);
       const x = edit.baseline.x * width;
       const y = edit.baseline.y * height;
-      if (x + textWidth(font, edit.text, edit.size) > width || y - edit.size * .8 < 0) throw new SmartEditError("The replacement does not fit at that position. Try shorter text or a smaller heading.");
+      if (x + textWidth(font, edit.text, edit.size) > width * (edit.right ?? 1) || y - edit.size * .8 < 0 || y + edit.size * .2 > height) {
+        throw new SmartEditError("The replacement does not fit in the available space. Try shorter text or use manual Edit PDF for precise placement.");
+      }
       const { cover } = edit;
       page.drawRectangle({ ...point(cover.x * width, (cover.y + cover.height) * height), width: cover.width * width, height: cover.height * height,
         rotate, color: rgb(1, 1, 1) });
@@ -120,9 +118,48 @@ async function prepare({ source, operation: input, image }: SmartJob) {
       page.drawText(edit.text, { ...point(x, y), rotate, font, size: edit.size, color: rgb(r, g, b) });
       break;
     }
+    case "set_field": {
+      if (pdf.catalog.getAcroForm()?.dict.has(PDFName.of("XFA"))) {
+        throw new SmartEditError("This form uses XFA. Upload a standard AcroForm or an accessible flattened copy.");
+      }
+      const form = pdf.getForm();
+      const field = form.getTextField(edit.field);
+      if (field.isReadOnly() || field.isRichFormatted() || (field.getText() ?? "") !== edit.before) {
+        throw new SmartEditError("This field is read-only, rich-text, or its value has changed. Review the source form.");
+      }
+      if (edit.text.length > (field.getMaxLength() ?? Infinity)) throw new SmartEditError("The new text exceeds this field’s character limit.");
+      const font = await pdf.embedFont(StandardFonts.Helvetica);
+      textWidth(font, edit.text, 12);
+      field.setText(edit.text);
+      field.updateAppearances(font);
+      break;
+    }
     case "insert_image":
       await drawPhoto(pdf, pages[edit.page], image, edit.box);
       break;
+    case "remove_page":
+    case "reorder_pages":
+    case "add_page_numbers":
+      break;
+    }
+  }
+  // Page references in a review refer to the original order. Number the final order last.
+  for (const edit of edits) if (edit.kind !== "rotate_page") await applyContent(edit);
+  for (const edit of edits) if (edit.kind === "rotate_page") await applyContent(edit);
+  if (reorder[0]) {
+    const { order } = reorder[0];
+    if (order.length !== pages.length || new Set(order).size !== pages.length || order.some((index) => index >= pages.length)) {
+      throw new SmartEditError("List each page exactly once.");
+    }
+    for (let index = pages.length - 1; index >= 0; index--) pdf.removePage(index);
+    for (const index of order) if (!removed.has(index)) pdf.addPage(pages[index]);
+  } else {
+    for (let index = pages.length - 1; index >= 0; index--) if (removed.has(index)) pdf.removePage(index);
+  }
+  if (numbering[0]) {
+    const font = await pdf.embedFont(StandardFonts.Helvetica);
+    const position = numbering[0].position;
+    pdf.getPages().forEach((page, index) => addText(page, font, String(index + 1), position));
   }
   const bytes = await pdf.save({ updateFieldAppearances: false });
   if (bytes.byteLength > smartPdfLimit) throw new SmartEditError("The result exceeds the 25 MiB Smart Editor limit.");

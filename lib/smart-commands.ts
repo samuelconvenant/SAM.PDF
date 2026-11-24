@@ -9,8 +9,8 @@ const namedPage = `(${ordered.slice(1).join("|")}|last) page`;
 const location = "(top left|top right|top cent(?:er|re)|bottom left|bottom right|bottom cent(?:er|re)|cent(?:er|re))";
 const quoted = '["“]([^"”]+)["”]';
 const colors = { black: "#000000", red: "#ac182d", blue: "#1b45a0", green: "#176942", purple: "#683091", gold: "#98740f" };
-type Position = { edge: "top" | "bottom" | "center"; align: "left" | "right" | "center" };
-type Style = { bold?: boolean; size?: number; color?: string; replacement?: string };
+export type Position = { edge: "top" | "bottom" | "center"; align: "left" | "right" | "center" };
+export type Style = { bold?: boolean; size?: number; color?: string; replacement?: string };
 export type Instruction =
   | { kind: "remove" | "remove_blank"; page: number }
   | { kind: "rotate"; page: number; angle: 90 | -90 | 180 | 270 | -270 }
@@ -21,6 +21,8 @@ export type Instruction =
   | { kind: "photo"; page: number; position?: Position };
 
 export const smartExamples = [
+  "Change the full name to Jordan Lee and the reference number to REF-206",
+  "Make the main heading larger",
   'Add "Confidential" at the top right of page one',
   "Add today's date at the top right of page one",
   "Change the document heading to Application Letter",
@@ -93,5 +95,5 @@ export function parseInstruction(input: string, active: number, count: number, t
   match = command.match(new RegExp(`^(?:please )?(?:insert|add|place|put) (?:(?:my|the|this|an?) )?(?:uploaded )?(?:passport )?(?:photo(?:graph)?|image)(?:(?: (?:into|in) (?:the )?(?:photo (?:box|placeholder)|placeholder))|(?: (?:at|in) (?:the )?${location}(?: corner)?))?(?: (?:on|of) page ${pageWord})?$`, "i"));
   if (match) return { kind: "photo", page: page(match[2]), position: match[1] ? position(match[1].toLowerCase()) : undefined };
 
-  throw new Error('I could not identify one supported edit. Give a page and an action, such as “Rotate page two”. Put added or exact replacement text in quotation marks.');
+  throw new Error("I couldn't identify a supported edit. Describe the field and its new value, or ask to format a heading, arrange pages, or place an uploaded photo.");
 }

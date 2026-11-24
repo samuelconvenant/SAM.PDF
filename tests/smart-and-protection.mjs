@@ -100,7 +100,9 @@ try {
   await desktop.getByRole("alert").filter({ hasText: "Choose a valid PDF" }).waitFor();
   await source.setInputFiles(await specimen(true));
   await submit(desktop, "Change the document heading to Revised title");
-  await desktop.getByRole("alert").filter({ hasText: "heading is ambiguous" }).waitFor();
+  await desktop.getByRole("heading", { name: "Which match should I use?" }).waitFor();
+  await desktop.getByRole("button", { name: /Heading · Original Application/ }).waitFor();
+  await desktop.getByRole("button", { name: /Heading · Another Heading/ }).waitFor();
   await source.setInputFiles(sample);
   await desktop.getByRole("heading", { name: sample.name }).waitFor();
 

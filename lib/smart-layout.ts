@@ -1,9 +1,9 @@
 import type { PDFDocumentProxy, PDFPageProxy, TextItem, TextStyle } from "pdfjs-dist/types/src/display/api";
-import { parseInstruction } from "./smart-commands";
+import type { Instruction } from "./smart-commands";
 import { smartOperation } from "./smart-plan";
 import type { SmartOperation, SmartRect } from "./smart-plan";
 
-type Candidate = { text: string; rect: SmartRect; baseline: { x: number; y: number }; size: number; bold: boolean };
+export type TextCandidate = { text: string; rect: SmartRect; baseline: { x: number; y: number }; size: number; bold: boolean; serif?: boolean };
 type Proposal = { operation: SmartOperation; note?: string };
 
 function bounds(points: number[][]): SmartRect {
@@ -12,7 +12,7 @@ function bounds(points: number[][]): SmartRect {
   return { x, y, width: Math.max(...points.map((point) => point[0])) - x, height: Math.max(...points.map((point) => point[1])) - y };
 }
 
-function textCandidate(page: PDFPageProxy, item: TextItem, style?: TextStyle): Candidate | null {
+export function textCandidate(page: PDFPageProxy, item: TextItem, style?: TextStyle): TextCandidate | null {
   const viewport = page.getViewport({ scale: 1 });
   const [a, b, c, d, x, y] = item.transform;
   const size = Math.hypot(c, d);
@@ -29,7 +29,7 @@ function textCandidate(page: PDFPageProxy, item: TextItem, style?: TextStyle): C
   ]);
   if (visual.x < 0 || visual.y < 0 || visual.x + visual.width > viewport.width || visual.y + visual.height > viewport.height) return null;
   return {
-    text: item.str.trim(), size, bold: /bold/i.test(item.fontName + (style?.fontFamily ?? "")),
+    text: item.str.trim(), size, bold: /bold/i.test(item.fontName + (style?.fontFamily ?? "")), serif: style?.fontFamily === "serif",
     rect: { x: visual.x / viewport.width, y: visual.y / viewport.height, width: visual.width / viewport.width, height: visual.height / viewport.height },
     baseline: { x: start[0] / viewport.width, y: start[1] / viewport.height },
   };
@@ -39,7 +39,7 @@ function overlaps(a: SmartRect, b: SmartRect) {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 }
 
-async function pageText(page: PDFPageProxy, signal: AbortSignal) {
+export async function pageText(page: PDFPageProxy, signal: AbortSignal) {
   const reader = page.streamTextContent().getReader();
   const items: TextItem[] = [];
   const styles: Record<string, TextStyle> = Object.create(null);
@@ -86,9 +86,9 @@ async function locateText(page: PDFPageProxy, signal: AbortSignal, exact?: strin
   return selected;
 }
 
-async function raster(page: PDFPageProxy, signal: AbortSignal) {
+export async function raster(page: PDFPageProxy, signal: AbortSignal, longest = 720) {
   const size = page.getViewport({ scale: 1 });
-  const viewport = page.getViewport({ scale: 720 / Math.max(size.width, size.height) });
+  const viewport = page.getViewport({ scale: longest / Math.max(size.width, size.height) });
   const canvas = document.createElement("canvas");
   canvas.width = Math.ceil(viewport.width);
   canvas.height = Math.ceil(viewport.height);
@@ -149,9 +149,7 @@ function findSlot({ data, width, height }: ImageData) {
   return boxes[0];
 }
 
-export async function planInstruction(pdf: PDFDocumentProxy, prompt: string, active: number, hasPhoto: boolean, signal: AbortSignal): Promise<Proposal> {
-  const today = new Intl.DateTimeFormat("en", { dateStyle: "long" }).format(new Date());
-  const command = parseInstruction(prompt, active, pdf.numPages, today);
+export async function planInstruction(pdf: PDFDocumentProxy, command: Instruction, hasPhoto: boolean, signal: AbortSignal): Promise<Proposal> {
   const plan = (operation: SmartOperation, note?: string) => {
     const validated = smartOperation.safeParse(operation);
     if (!validated.success) throw new Error("The requested text size, length or position is outside the supported range.");

@@ -37,6 +37,13 @@
 .smart-examples ul { margin: 0; padding-inline-start: 18px; }
 .smart-examples button { padding: 5px; font-size: .8rem; text-align: start; text-decoration: underline; text-underline-offset: 3px; }
 .smart-review { border-top: 1px solid var(--line); padding-top: 14px; }
+.smart-changes { padding: 0; margin: 0; list-style: none; display: grid; gap: 8px; }
+.smart-changes > li { min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 9px; overflow-wrap: anywhere; }
+.smart-changes .button { width: 100%; justify-content: flex-start; text-align: start; }
+.smart-changes dl { margin: 7px 0; font-size: .85rem; }
+.smart-changes dl div { display: grid; grid-template-columns: 4.5em minmax(0, 1fr); gap: .4em; }
+.smart-changes dt { color: var(--muted); }
+.smart-changes dd { margin: 0; }
 .smart-photo-adjust fieldset {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -19,13 +19,16 @@ export const smartOperation = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("reorder_pages"), order: z.array(page).min(1).max(smartPageLimit) }),
   z.strictObject({ kind: z.literal("add_page_numbers"), position }),
   z.strictObject({ kind: z.literal("add_text"), page, text, position, anchor: point.optional() }),
-  z.strictObject({ kind: z.literal("cover_text"), page, text, cover: rect, baseline: point, size: z.number().min(6).max(96), bold: z.boolean(), color }),
+  z.strictObject({ kind: z.literal("cover_text"), page, text, cover: rect, baseline: point, size: z.number().min(6).max(96),
+    bold: z.boolean(), color, serif: z.boolean().optional(), right: unit.optional() }),
+  z.strictObject({ kind: z.literal("set_field"), page, field: z.string().min(1).max(240), before: z.string().max(2000), text }),
   z.strictObject({ kind: z.literal("insert_image"), page, box: rect }),
 ]);
 
 export type SmartOperation = z.infer<typeof smartOperation>;
 export type SmartRect = z.infer<typeof rect>;
-export type SmartJob = { source: File; operation: SmartOperation; image?: string };
+export const smartOperations = z.array(smartOperation).min(1).max(16);
+export type SmartJob = { source: File; operations: SmartOperation[]; image?: string };
 
 export function operationLabel(operation: SmartOperation) {
   const where = "page" in operation ? `page ${operation.page + 1}` : "";
@@ -36,6 +39,7 @@ export function operationLabel(operation: SmartOperation) {
     case "add_page_numbers": return "Add a number to each page";
     case "add_text": return `Add “${operation.text}” on ${where}`;
     case "cover_text": return `Cover original text on ${where} with “${operation.text}”`;
+    case "set_field": return `Update the fillable field on ${where}`;
     case "insert_image": return `Place the uploaded photo on ${where}`;
   }
 }
